@@ -1,5 +1,5 @@
 // =====================================================================
-// UPDATED SHARED SCRIPT -- host this file on GitHub, reference it via a CDN
+// TIMEOUT DELAYED SHARED SCRIPT -- host this file on GitHub, reference it via a CDN
 // (see deployment notes) from each Carrd page, AFTER that page's own
 // local configuration variables have been declared.
 //
@@ -132,37 +132,28 @@ var AMAZON_ATTRIBUTION = {
 // =====================================================================
 
 var AMAZON_MARKETPLACE_DOMAINS = {
-
-    // Americas
-    'US': 'amazon.com',
-    'CA': 'amazon.ca',
-    'MX': 'amazon.com.mx',
-    'BR': 'amazon.com.br',
-
-    // Europe
-    'UK': 'amazon.co.uk',
-    'IE': 'amazon.co.uk',
-    'DE': 'amazon.de',
-    'FR': 'amazon.fr',
-    'ES': 'amazon.es',
-    'IT': 'amazon.it',
-    'NL': 'amazon.nl',
-    'BE': 'amazon.com.be',
-    'PL': 'amazon.pl',
-    'SE': 'amazon.se',
-    'TR': 'amazon.com.tr',
-
-    // Asia-Pacific
-    'AU': 'amazon.com.au',
-    'IN': 'amazon.in',
-    'JP': 'amazon.co.jp',
-    'SG': 'amazon.sg',
-
-    // Middle East / Africa
-    'AE': 'amazon.ae',
-    'SA': 'amazon.sa',
-    'EG': 'amazon.eg',
-    'ZA': 'amazon.co.za'
+    'US': 'www.amazon.com',
+    'CA': 'www.amazon.ca',
+    'MX': 'www.amazon.com.mx',
+    'BR': 'www.amazon.com.br',
+    'UK': 'www.amazon.co.uk',
+    'DE': 'www.amazon.de',
+    'FR': 'www.amazon.fr',
+    'ES': 'www.amazon.es',
+    'IT': 'www.amazon.it',
+    'NL': 'www.amazon.nl',
+    'BE': 'www.amazon.com.be',
+    'PL': 'www.amazon.pl',
+    'SE': 'www.amazon.se',
+    'TR': 'www.amazon.com.tr',
+    'AU': 'www.amazon.com.au',
+    'IN': 'www.amazon.in',
+    'JP': 'www.amazon.co.jp',
+    'SG': 'www.amazon.sg',
+    'AE': 'www.amazon.ae',
+    'SA': 'www.amazon.sa',
+    'EG': 'www.amazon.eg',
+    'ZA': 'www.amazon.co.za'
 };
 
 
@@ -600,78 +591,56 @@ function applyAmazonLink(
 // =====================================================================
 
 function rewriteAmazonLinks(marketplaceCode) {
+    document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
+        var originalHref = el.getAttribute('href') || '';
+        var asin = extractAsinFromElement(el);
 
-    // US is already the default Amazon store, so don't touch existing
-    // US links or other links on a US visitor's page.
-    if (marketplaceCode === 'US') return;
-
-
-    // ---------------------------------------------------------------
-    // 1. Explicitly known elements:
-    //    buy buttons + book image/tag links.
-    //
-    // These may use short links that don't expose an ASIN in the href,
-    // so BOOK_ASIN is used directly.
-    // ---------------------------------------------------------------
-
-    var knownSelectors =
-        normalizeSelectorList(buyButtonTags)
-            .concat(
-                normalizeSelectorList(bookTags)
-            );
-
-
-    knownSelectors.forEach(
-        function(selector) {
-
-            document
-                .querySelectorAll(selector)
-                .forEach(
-                    function(el) {
-
-                        applyAmazonLink(
-                            el,
-                            BOOK_ASIN,
-                            marketplaceCode
-                        );
-                    }
-                );
+        if (!asin) {
+            console.log('Amazon link found but no ASIN:', originalHref);
+            return;
         }
-    );
 
-
-    // ---------------------------------------------------------------
-    // 2. Generic sweep:
-    //    find any other Amazon link containing a literal ASIN.
-    // ---------------------------------------------------------------
-
-    document
-        .querySelectorAll(
-            'a[href*="amazon" i]'
-        )
-        .forEach(
-            function(el) {
-
-                var asin =
-                    extractAsinFromElement(el);
-
-                if (asin) {
-
-                    applyAmazonLink(
-                        el,
-                        asin,
-                        marketplaceCode
-                    );
-
-                } else {
-
-                    console.warn(
-                        'Amazon link found but ASIN not detected:',
-                        el.href
-                    );
-                }
-            }
+        console.log(
+            'Amazon link:',
+            originalHref,
+            'ASIN:',
+            asin,
+            'Marketplace:',
+            marketplaceCode
         );
+
+        applyAmazonLink(el, asin, marketplaceCode);
+    });
+}
+
+function applyAmazonLink(el, asin, marketplaceCode) {
+    var entry = AMAZON_ATTRIBUTION[asin];
+
+    // 1. Attribution URL always takes priority
+    if (entry && entry[marketplaceCode]) {
+        el.setAttribute('href', entry[marketplaceCode]);
+        console.log(
+            'Using Attribution URL for ASIN ' + asin +
+            ' -> ' + marketplaceCode
+        );
+        return;
+    }
+
+    // 2. No Attribution URL: use the normal local Amazon store
+    var domain = AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
+
+    if (domain) {
+        var localUrl = 'https://' + domain + '/dp/' + asin;
+        el.setAttribute('href', localUrl);
+
+        console.log(
+            'Using local Amazon URL for ASIN ' + asin +
+            ' -> ' + localUrl
+        );
+        return;
+    }
+
+    // 3. No known marketplace: leave the original link alone
 }
 
 // =====================================================================
@@ -704,7 +673,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // special-casing needed in the button logic below.
     var marketplaceCode = inferMarketplaceCode();
     console.log('Inferred marketplace:', marketplaceCode);
-    rewriteAmazonLinks(marketplaceCode);
+    setTimeout(function() {
+        rewriteAmazonLinks(inferredMarketplace);
+    }, 500);
 
     function trackViewContent(contentName, contentCategory) {
         try {
