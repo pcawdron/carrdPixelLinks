@@ -9,6 +9,7 @@
 //   bookTags, reviewTags, seriesTags, buyButtonTags,
 //   BrowserBannerContainer, BrowserBannerDivider
 // =====================================================================
+console.log('Pixel script loaded... v1.01');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -664,7 +665,6 @@ window.addEventListener('load', updateMetaBrowserBanner);
 // PAGE INTERACTION TRACKING
 // =====================================================================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Pixel script loaded...');
 
     // Localize Amazon links before anything else. Buy-button click
     // handlers read `this.href` live at click time, so as long as this
