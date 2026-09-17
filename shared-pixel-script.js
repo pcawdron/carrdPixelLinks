@@ -11,7 +11,7 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
-console.log('Pixel script loaded... v1.01');
+console.log('Pixel script loaded... v1.02');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -675,8 +675,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // special-casing needed in the button logic below.
     var marketplaceCode = inferMarketplaceCode();
     console.log('Inferred marketplace:', marketplaceCode);
+
     setTimeout(function() {
-        rewriteAmazonLinks(inferredMarketplace);
+        rewriteAmazonLinks(marketplaceCode);
     }, 500);
 
     function trackViewContent(contentName, contentCategory) {
