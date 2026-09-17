@@ -1,5 +1,5 @@
 // =====================================================================
-// SHARED SCRIPT -- host this file on GitHub, reference it via a CDN
+// UPDATED SHARED SCRIPT -- host this file on GitHub, reference it via a CDN
 // (see deployment notes) from each Carrd page, AFTER that page's own
 // local configuration variables have been declared.
 //
@@ -119,94 +119,559 @@ var AMAZON_ATTRIBUTION = {
 };
 
 // =====================================================================
-// MARKETPLACE INFERENCE -- language + timezone, no permission prompt.
-// Deliberately conservative: only returns a non-US code when the
-// signal is reasonably clear. Anything ambiguous falls through to
-// 'US', which is safe because 'US' means "don't touch the existing
-// link" -- never a broken outcome, at worst a missed localization.
+// MARKETPLACE INFERENCE + AMAZON FALLBACK
+//
+// Priority when rewriting an Amazon link:
+//   1. Amazon Attribution URL for this ASIN + marketplace, if available.
+//   2. Normal local Amazon marketplace URL, if the marketplace is known.
+//   3. Otherwise leave the original URL untouched.
+//
+// The Attribution table above is deliberately kept separate from the
+// marketplace-domain table below. This means adding a local marketplace
+// fallback can never overwrite an Attribution URL.
 // =====================================================================
+
+var AMAZON_MARKETPLACE_DOMAINS = {
+
+    // Americas
+    'US': 'amazon.com',
+    'CA': 'amazon.ca',
+    'MX': 'amazon.com.mx',
+    'BR': 'amazon.com.br',
+
+    // Europe
+    'UK': 'amazon.co.uk',
+    'IE': 'amazon.co.uk',
+    'DE': 'amazon.de',
+    'FR': 'amazon.fr',
+    'ES': 'amazon.es',
+    'IT': 'amazon.it',
+    'NL': 'amazon.nl',
+    'BE': 'amazon.com.be',
+    'PL': 'amazon.pl',
+    'SE': 'amazon.se',
+    'TR': 'amazon.com.tr',
+
+    // Asia-Pacific
+    'AU': 'amazon.com.au',
+    'IN': 'amazon.in',
+    'JP': 'amazon.co.jp',
+    'SG': 'amazon.sg',
+
+    // Middle East / Africa
+    'AE': 'amazon.ae',
+    'SA': 'amazon.sa',
+    'EG': 'amazon.eg',
+    'ZA': 'amazon.co.za'
+};
+
+
+// =====================================================================
+// TIMEZONE -> AMAZON MARKETPLACE
+//
+// Timezone is the strongest browser-side location signal available here.
+// Some Amazon stores cannot be distinguished reliably by timezone alone,
+// because multiple countries share the same timezone.
+//
+// Browser language/country is therefore used as a secondary signal only
+// when timezone does not identify a marketplace.
+// =====================================================================
+
 var TIMEZONE_MARKETPLACE_MAP = [
+
+    // Australia
     { prefix: 'Australia/', code: 'AU' },
+
+    // United Kingdom
     { prefix: 'Europe/London', code: 'UK' },
+
+    // Ireland
+    { prefix: 'Europe/Dublin', code: 'IE' },
+
+    // Germany / Austria
     { prefix: 'Europe/Berlin', code: 'DE' },
     { prefix: 'Europe/Vienna', code: 'DE' },
+
+    // France
     { prefix: 'Europe/Paris', code: 'FR' },
-    { zones: ['America/Toronto', 'America/Vancouver', 'America/Montreal', 'America/Winnipeg', 'America/Edmonton', 'America/Halifax'], code: 'CA' }
+
+    // Spain
+    { prefix: 'Europe/Madrid', code: 'ES' },
+
+    // Italy
+    { prefix: 'Europe/Rome', code: 'IT' },
+
+    // Netherlands
+    { prefix: 'Europe/Amsterdam', code: 'NL' },
+
+    // Belgium
+    { prefix: 'Europe/Brussels', code: 'BE' },
+
+    // Poland
+    { prefix: 'Europe/Warsaw', code: 'PL' },
+
+    // Sweden
+    { prefix: 'Europe/Stockholm', code: 'SE' },
+
+    // Turkey
+    { prefix: 'Europe/Istanbul', code: 'TR' },
+
+    // Canada
+    {
+        zones: [
+            'America/Toronto',
+            'America/Vancouver',
+            'America/Montreal',
+            'America/Winnipeg',
+            'America/Edmonton',
+            'America/Halifax',
+            'America/St_Johns'
+        ],
+        code: 'CA'
+    },
+
+    // Mexico
+    {
+        zones: [
+            'America/Mexico_City',
+            'America/Cancun',
+            'America/Monterrey',
+            'America/Merida',
+            'America/Chihuahua',
+            'America/Mazatlan',
+            'America/Tijuana'
+        ],
+        code: 'MX'
+    },
+
+    // Brazil
+    {
+        zones: [
+            'America/Sao_Paulo',
+            'America/Fortaleza',
+            'America/Recife',
+            'America/Bahia',
+            'America/Belem',
+            'America/Manaus',
+            'America/Cuiaba',
+            'America/Porto_Velho',
+            'America/Rio_Branco'
+        ],
+        code: 'BR'
+    },
+
+    // India
+    { prefix: 'Asia/Kolkata', code: 'IN' },
+
+    // Japan
+    { prefix: 'Asia/Tokyo', code: 'JP' },
+
+    // Singapore
+    { prefix: 'Asia/Singapore', code: 'SG' },
+
+    // United Arab Emirates
+    { prefix: 'Asia/Dubai', code: 'AE' },
+
+    // Saudi Arabia
+    { prefix: 'Asia/Riyadh', code: 'SA' },
+
+    // Egypt
+    { prefix: 'Africa/Cairo', code: 'EG' },
+
+    // South Africa
+    { prefix: 'Africa/Johannesburg', code: 'ZA' }
 ];
 
+
 function inferMarketplaceCode() {
+
     var timeZone = '';
+
     try {
-        timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        timeZone =
+            Intl.DateTimeFormat().resolvedOptions().timeZone || '';
     } catch (err) {
         console.warn('Timezone detection failed:', err);
     }
 
+
+    // ---------------------------------------------------------------
+    // 1. Try timezone first.
+    // ---------------------------------------------------------------
+
     for (var i = 0; i < TIMEZONE_MARKETPLACE_MAP.length; i++) {
+
         var rule = TIMEZONE_MARKETPLACE_MAP[i];
-        if (rule.prefix && timeZone.indexOf(rule.prefix) === 0) return rule.code;
-        if (rule.zones && rule.zones.indexOf(timeZone) !== -1) return rule.code;
+
+        if (
+            rule.prefix &&
+            timeZone.indexOf(rule.prefix) === 0
+        ) {
+            return rule.code;
+        }
+
+        if (
+            rule.zones &&
+            rule.zones.indexOf(timeZone) !== -1
+        ) {
+            return rule.code;
+        }
     }
 
-    // Timezone didn't match anything specific -- fall back to language
-    // as a weaker secondary signal (only trusted for a clean regional match).
-    var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+
+    // ---------------------------------------------------------------
+    // 2. Timezone was ambiguous/unrecognised.
+    //    Use browser language as a weaker secondary signal.
+    // ---------------------------------------------------------------
+
+    var lang =
+        (
+            navigator.language ||
+            navigator.userLanguage ||
+            ''
+        ).toLowerCase();
+
+
     if (lang === 'en-au') return 'AU';
+
     if (lang === 'en-gb') return 'UK';
-    if (lang === 'en-ca' || lang === 'fr-ca') return 'CA';
-    if (lang === 'de' || lang === 'de-de') return 'DE';
-    if (lang === 'fr' || lang === 'fr-fr') return 'FR';
+
+    if (lang === 'en-ie') return 'IE';
+
+    if (
+        lang === 'en-ca' ||
+        lang === 'fr-ca'
+    ) {
+        return 'CA';
+    }
+
+    if (lang === 'es-mx') return 'MX';
+
+    if (lang === 'pt-br') return 'BR';
+
+    if (
+        lang === 'de' ||
+        lang === 'de-de' ||
+        lang === 'de-at' ||
+        lang === 'de-ch'
+    ) {
+        return 'DE';
+    }
+
+    if (
+        lang === 'fr' ||
+        lang === 'fr-fr' ||
+        lang === 'fr-be'
+    ) {
+        return 'FR';
+    }
+
+    if (
+        lang === 'es' ||
+        lang === 'es-es'
+    ) {
+        return 'ES';
+    }
+
+    if (
+        lang === 'it' ||
+        lang === 'it-it'
+    ) {
+        return 'IT';
+    }
+
+    if (
+        lang === 'nl' ||
+        lang === 'nl-nl' ||
+        lang === 'nl-be'
+    ) {
+        return 'NL';
+    }
+
+    if (
+        lang === 'pl' ||
+        lang === 'pl-pl'
+    ) {
+        return 'PL';
+    }
+
+    if (
+        lang === 'sv' ||
+        lang === 'sv-se'
+    ) {
+        return 'SE';
+    }
+
+    if (
+        lang === 'tr' ||
+        lang === 'tr-tr'
+    ) {
+        return 'TR';
+    }
+
+    if (
+        lang === 'hi' ||
+        lang === 'hi-in'
+    ) {
+        return 'IN';
+    }
+
+    if (
+        lang === 'ja' ||
+        lang === 'ja-jp'
+    ) {
+        return 'JP';
+    }
+
+    if (
+        lang === 'zh-sg' ||
+        lang === 'en-sg'
+    ) {
+        return 'SG';
+    }
+
+    if (lang === 'ar-ae') return 'AE';
+
+    if (lang === 'ar-sa') return 'SA';
+
+    if (lang === 'ar-eg') return 'EG';
+
+    if (lang === 'en-za') return 'ZA';
+
+
+    // ---------------------------------------------------------------
+    // 3. Final fallback.
+    //
+    // US means "leave the existing link alone".
+    // ---------------------------------------------------------------
 
     return 'US';
 }
 
+
 // =====================================================================
 // AMAZON LINK LOCALIZATION
-// Rewrites any element's href to the correct marketplace's Attribution
-// link, IF a match exists. No match (or marketplace === US) leaves the
-// existing href on the page completely untouched.
 // =====================================================================
-var ASIN_PATTERN = /(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&]|$)/;
+
+// Handles both:
+//   https://www.amazon.com/dp/B082KKRH1Z
+//   https://www.amazon.com/gp/product/B01F02A89K
+//
+// The leading slash makes this more precise without changing the
+// behaviour for the Amazon URL formats used on the pages.
+var ASIN_PATTERN =
+    /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&]|$)/i;
+
 
 function extractAsinFromElement(el) {
-    if (el.dataset && el.dataset.asin) return el.dataset.asin;
 
-    var href = el.getAttribute('href') || '';
-    var match = href.match(ASIN_PATTERN);
-    if (match) return match[1];
+    // First use an explicit data-asin attribute if present.
+    if (
+        el.dataset &&
+        el.dataset.asin
+    ) {
+        return el.dataset.asin.toUpperCase();
+    }
+
+
+    // Otherwise extract the ASIN from the href.
+    var href =
+        el.getAttribute('href') || '';
+
+    var match =
+        href.match(ASIN_PATTERN);
+
+    if (match) {
+        return match[1].toUpperCase();
+    }
 
     return null;
 }
 
-function rewriteAmazonLinks(marketplaceCode) {
-    if (marketplaceCode === 'US') return; // existing links already are the US default
 
-    // 1. Explicitly known elements: buy buttons + book image/tag links.
-    //    These use short links (e.g. geni.us) that don't expose an ASIN
-    //    in the href text, so we already know the ASIN from BOOK_ASIN.
-    var knownSelectors = normalizeSelectorList(buyButtonTags)
-        .concat(normalizeSelectorList(bookTags));
+// =====================================================================
+// APPLY AMAZON LINK
+//
+// IMPORTANT:
+// Attribution has absolute priority.
+//
+// If an Attribution URL exists for the ASIN + marketplace, this
+// function sets that URL and RETURNS immediately. The ordinary local
+// Amazon fallback therefore cannot overwrite it.
+//
+// If no Attribution URL exists, the function constructs a normal
+// Amazon marketplace URL such as:
+//
+//   https://www.amazon.com.au/dp/B01F02A89K
+//
+// If the marketplace is unknown, the original URL is untouched.
+// =====================================================================
 
-    knownSelectors.forEach(function(selector) {
-        document.querySelectorAll(selector).forEach(function(el) {
-            applyAttributionLink(el, BOOK_ASIN, marketplaceCode);
-        });
-    });
+function applyAmazonLink(
+    el,
+    asin,
+    marketplaceCode
+) {
 
-    // 2. Generic sweep: any other link on the page carrying a literal
-    //    ASIN in its href (e.g. the reader-reviews link), regardless
-    //    of which book it points to.
-    document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
-        var asin = extractAsinFromElement(el);
-        if (asin) applyAttributionLink(el, asin, marketplaceCode);
-    });
+    if (!asin) return;
+
+    asin = asin.toUpperCase();
+
+
+    // ---------------------------------------------------------------
+    // PRIORITY 1: AMAZON ATTRIBUTION URL
+    // ---------------------------------------------------------------
+
+    var attributionEntry =
+        AMAZON_ATTRIBUTION[asin];
+
+    if (
+        attributionEntry &&
+        attributionEntry[marketplaceCode]
+    ) {
+
+        var attributionUrl =
+            attributionEntry[marketplaceCode];
+
+        el.setAttribute(
+            'href',
+            attributionUrl
+        );
+
+        console.log(
+            'Amazon Attribution applied:',
+            asin,
+            '->',
+            marketplaceCode,
+            attributionUrl
+        );
+
+        // CRITICAL: prevents fallback from overwriting attribution.
+        return;
+    }
+
+
+    // ---------------------------------------------------------------
+    // PRIORITY 2: NORMAL LOCAL AMAZON STORE
+    // ---------------------------------------------------------------
+
+    var amazonDomain =
+        AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
+
+    if (amazonDomain) {
+
+        var localUrl =
+            'https://' +
+            amazonDomain +
+            '/dp/' +
+            asin;
+
+        el.setAttribute(
+            'href',
+            localUrl
+        );
+
+        console.log(
+            'Local Amazon marketplace applied:',
+            asin,
+            '->',
+            marketplaceCode,
+            localUrl
+        );
+
+        return;
+    }
+
+
+    // ---------------------------------------------------------------
+    // PRIORITY 3: NO KNOWN MARKETPLACE
+    // ---------------------------------------------------------------
+
+    console.log(
+        'No Amazon marketplace available:',
+        asin,
+        marketplaceCode
+    );
 }
 
-function applyAttributionLink(el, asin, marketplaceCode) {
-    var entry = AMAZON_ATTRIBUTION[asin];
-    if (!entry || !entry[marketplaceCode]) return; // no match -- leave untouched
-    el.setAttribute('href', entry[marketplaceCode]);
-    console.log('Localized link for ASIN ' + asin + ' -> ' + marketplaceCode);
+
+// =====================================================================
+// REWRITE AMAZON LINKS
+// =====================================================================
+
+function rewriteAmazonLinks(marketplaceCode) {
+
+    // US is already the default Amazon store, so don't touch existing
+    // US links or other links on a US visitor's page.
+    if (marketplaceCode === 'US') return;
+
+
+    // ---------------------------------------------------------------
+    // 1. Explicitly known elements:
+    //    buy buttons + book image/tag links.
+    //
+    // These may use short links that don't expose an ASIN in the href,
+    // so BOOK_ASIN is used directly.
+    // ---------------------------------------------------------------
+
+    var knownSelectors =
+        normalizeSelectorList(buyButtonTags)
+            .concat(
+                normalizeSelectorList(bookTags)
+            );
+
+
+    knownSelectors.forEach(
+        function(selector) {
+
+            document
+                .querySelectorAll(selector)
+                .forEach(
+                    function(el) {
+
+                        applyAmazonLink(
+                            el,
+                            BOOK_ASIN,
+                            marketplaceCode
+                        );
+                    }
+                );
+        }
+    );
+
+
+    // ---------------------------------------------------------------
+    // 2. Generic sweep:
+    //    find any other Amazon link containing a literal ASIN.
+    // ---------------------------------------------------------------
+
+    document
+        .querySelectorAll(
+            'a[href*="amazon" i]'
+        )
+        .forEach(
+            function(el) {
+
+                var asin =
+                    extractAsinFromElement(el);
+
+                if (asin) {
+
+                    applyAmazonLink(
+                        el,
+                        asin,
+                        marketplaceCode
+                    );
+
+                } else {
+
+                    console.warn(
+                        'Amazon link found but ASIN not detected:',
+                        el.href
+                    );
+                }
+            }
+        );
 }
 
 // =====================================================================
