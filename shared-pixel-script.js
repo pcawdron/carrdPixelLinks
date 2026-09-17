@@ -8,6 +8,8 @@
 //   PIXEL_ID, BOOK_NAME, BOOK_PRICE, BOOK_ASIN, SERIES_URL,
 //   bookTags, reviewTags, seriesTags, buyButtonTags,
 //   BrowserBannerContainer, BrowserBannerDivider
+//
+// <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
 console.log('Pixel script loaded... v1.01');
 
