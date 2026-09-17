@@ -166,7 +166,7 @@ function inferMarketplaceCode() {
 // link, IF a match exists. No match (or marketplace === US) leaves the
 // existing href on the page completely untouched.
 // =====================================================================
-var ASIN_PATTERN = /\/dp\/([A-Z0-9]{10})(?:[/?]|$)/;
+var ASIN_PATTERN = /(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&]|$)/;
 
 function extractAsinFromElement(el) {
     if (el.dataset && el.dataset.asin) return el.dataset.asin;
