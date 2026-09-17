@@ -11,7 +11,7 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
-console.log('Pixel script loaded... v1.02');
+console.log('Pixel script loaded... v1.03');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -603,14 +603,7 @@ function rewriteAmazonLinks(marketplaceCode) {
             return;
         }
 
-        console.log(
-            'Amazon link:',
-            originalHref,
-            'ASIN:',
-            asin,
-            'Marketplace:',
-            marketplaceCode
-        );
+        //console.log('Amazon link:',originalHref,'ASIN:',asin,'Marketplace:',marketplaceCode);
 
         applyAmazonLink(el, asin, marketplaceCode);
     });
