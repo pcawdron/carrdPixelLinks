@@ -196,7 +196,7 @@ function rewriteAmazonLinks(marketplaceCode) {
     // 2. Generic sweep: any other link on the page carrying a literal
     //    ASIN in its href (e.g. the reader-reviews link), regardless
     //    of which book it points to.
-    document.querySelectorAll('a[href*="/dp/"]').forEach(function(el) {
+    document.querySelectorAll('a[href*="amazon"]').forEach(function(el) {
         var asin = extractAsinFromElement(el);
         if (asin) applyAttributionLink(el, asin, marketplaceCode);
     });
