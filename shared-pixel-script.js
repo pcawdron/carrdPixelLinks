@@ -173,8 +173,9 @@ var AMAZON_MARKETPLACE_DOMAINS = {
 
 var TIMEZONE_MARKETPLACE_MAP = [
 
-    // Australia
+    // Australia & NZ
     { prefix: 'Australia/', code: 'AU' },
+    { prefix: 'Pacific/Auckland', code: 'AU' },
 
     // United Kingdom
     { prefix: 'Europe/London', code: 'UK' },
