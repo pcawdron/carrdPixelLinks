@@ -1,5 +1,5 @@
 // =====================================================================
-// TIMEOUT DELAYED SHARED SCRIPT -- host this file on GitHub, reference it via a CDN
+// SHARED SCRIPT -- host this file on GitHub, reference it via a CDN
 // (see deployment notes) from each Carrd page, AFTER that page's own
 // local configuration variables have been declared.
 //
@@ -11,7 +11,7 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
-console.log('Pixel script loaded... v1.03');
+console.log('Pixel script loaded... v1.05');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -80,9 +80,6 @@ function normalizeSelectorList(value) {
 
 // =====================================================================
 // AMAZON MARKETPLACE ATTRIBUTION DATA
-// Generated from the Amazon Attribution export. Re-generate and
-// replace this block whenever new attribution links are issued.
-// Structure: AMAZON_ATTRIBUTION[ASIN][MARKETPLACE_CODE] = full URL
 // =====================================================================
 var AMAZON_ATTRIBUTION = {
     'B01F02A89K': {
@@ -123,521 +120,130 @@ var AMAZON_ATTRIBUTION = {
 
 // =====================================================================
 // MARKETPLACE INFERENCE + AMAZON FALLBACK
-//
-// Priority when rewriting an Amazon link:
-//   1. Amazon Attribution URL for this ASIN + marketplace, if available.
-//   2. Normal local Amazon marketplace URL, if the marketplace is known.
-//   3. Otherwise leave the original URL untouched.
-//
-// The Attribution table above is deliberately kept separate from the
-// marketplace-domain table below. This means adding a local marketplace
-// fallback can never overwrite an Attribution URL.
 // =====================================================================
-
 var AMAZON_MARKETPLACE_DOMAINS = {
-    'US': 'www.amazon.com',
-    'CA': 'www.amazon.ca',
-    'MX': 'www.amazon.com.mx',
-    'BR': 'www.amazon.com.br',
-    'UK': 'www.amazon.co.uk',
-    'DE': 'www.amazon.de',
-    'FR': 'www.amazon.fr',
-    'ES': 'www.amazon.es',
-    'IT': 'www.amazon.it',
-    'NL': 'www.amazon.nl',
-    'BE': 'www.amazon.com.be',
-    'PL': 'www.amazon.pl',
-    'SE': 'www.amazon.se',
-    'TR': 'www.amazon.com.tr',
-    'AU': 'www.amazon.com.au',
-    'IN': 'www.amazon.in',
-    'JP': 'www.amazon.co.jp',
-    'SG': 'www.amazon.sg',
-    'AE': 'www.amazon.ae',
-    'SA': 'www.amazon.sa',
-    'EG': 'www.amazon.eg',
+    'US': 'www.amazon.com', 'CA': 'www.amazon.ca', 'MX': 'www.amazon.com.mx',
+    'BR': 'www.amazon.com.br', 'UK': 'www.amazon.co.uk', 'DE': 'www.amazon.de',
+    'FR': 'www.amazon.fr', 'ES': 'www.amazon.es', 'IT': 'www.amazon.it',
+    'NL': 'www.amazon.nl', 'BE': 'www.amazon.com.be', 'PL': 'www.amazon.pl',
+    'SE': 'www.amazon.se', 'TR': 'www.amazon.com.tr', 'AU': 'www.amazon.com.au',
+    'IN': 'www.amazon.in', 'JP': 'www.amazon.co.jp', 'SG': 'www.amazon.sg',
+    'AE': 'www.amazon.ae', 'SA': 'www.amazon.sa', 'EG': 'www.amazon.eg',
     'ZA': 'www.amazon.co.za'
 };
 
-
-// =====================================================================
-// TIMEZONE -> AMAZON MARKETPLACE
-//
-// Timezone is the strongest browser-side location signal available here.
-// Some Amazon stores cannot be distinguished reliably by timezone alone,
-// because multiple countries share the same timezone.
-//
-// Browser language/country is therefore used as a secondary signal only
-// when timezone does not identify a marketplace.
-// =====================================================================
-
 var TIMEZONE_MARKETPLACE_MAP = [
-
-    // Australia & NZ
     { prefix: 'Australia/', code: 'AU' },
     { prefix: 'Pacific/Auckland', code: 'AU' },
-
-    // United Kingdom
     { prefix: 'Europe/London', code: 'UK' },
-
-    // Ireland
     { prefix: 'Europe/Dublin', code: 'IE' },
-
-    // Germany / Austria
     { prefix: 'Europe/Berlin', code: 'DE' },
     { prefix: 'Europe/Vienna', code: 'DE' },
-
-    // France
     { prefix: 'Europe/Paris', code: 'FR' },
-
-    // Spain
     { prefix: 'Europe/Madrid', code: 'ES' },
-
-    // Italy
     { prefix: 'Europe/Rome', code: 'IT' },
-
-    // Netherlands
     { prefix: 'Europe/Amsterdam', code: 'NL' },
-
-    // Belgium
     { prefix: 'Europe/Brussels', code: 'BE' },
-
-    // Poland
     { prefix: 'Europe/Warsaw', code: 'PL' },
-
-    // Sweden
     { prefix: 'Europe/Stockholm', code: 'SE' },
-
-    // Turkey
     { prefix: 'Europe/Istanbul', code: 'TR' },
-
-    // Canada
-    {
-        zones: [
-            'America/Toronto',
-            'America/Vancouver',
-            'America/Montreal',
-            'America/Winnipeg',
-            'America/Edmonton',
-            'America/Halifax',
-            'America/St_Johns'
-        ],
-        code: 'CA'
-    },
-
-    // Mexico
-    {
-        zones: [
-            'America/Mexico_City',
-            'America/Cancun',
-            'America/Monterrey',
-            'America/Merida',
-            'America/Chihuahua',
-            'America/Mazatlan',
-            'America/Tijuana'
-        ],
-        code: 'MX'
-    },
-
-    // Brazil
-    {
-        zones: [
-            'America/Sao_Paulo',
-            'America/Fortaleza',
-            'America/Recife',
-            'America/Bahia',
-            'America/Belem',
-            'America/Manaus',
-            'America/Cuiaba',
-            'America/Porto_Velho',
-            'America/Rio_Branco'
-        ],
-        code: 'BR'
-    },
-
-    // India
+    { zones: ['America/Toronto', 'America/Vancouver', 'America/Montreal', 'America/Winnipeg', 'America/Edmonton', 'America/Halifax', 'America/St_Johns'], code: 'CA' },
+    { zones: ['America/Mexico_City', 'America/Cancun', 'America/Monterrey', 'America/Merida', 'America/Chihuahua', 'America/Mazatlan', 'America/Tijuana'], code: 'MX' },
+    { zones: ['America/Sao_Paulo', 'America/Fortaleza', 'America/Recife', 'America/Bahia', 'America/Belem', 'America/Manaus', 'America/Cuiaba', 'America/Porto_Velho', 'America/Rio_Branco'], code: 'BR' },
     { prefix: 'Asia/Kolkata', code: 'IN' },
-
-    // Japan
     { prefix: 'Asia/Tokyo', code: 'JP' },
-
-    // Singapore
     { prefix: 'Asia/Singapore', code: 'SG' },
-
-    // United Arab Emirates
     { prefix: 'Asia/Dubai', code: 'AE' },
-
-    // Saudi Arabia
     { prefix: 'Asia/Riyadh', code: 'SA' },
-
-    // Egypt
     { prefix: 'Africa/Cairo', code: 'EG' },
-
-    // South Africa
     { prefix: 'Africa/Johannesburg', code: 'ZA' }
 ];
 
-
 function inferMarketplaceCode() {
-
     var timeZone = '';
-
     try {
-        timeZone =
-            Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
     } catch (err) {
         console.warn('Timezone detection failed:', err);
     }
 
-
-    // ---------------------------------------------------------------
-    // 1. Try timezone first.
-    // ---------------------------------------------------------------
-
     for (var i = 0; i < TIMEZONE_MARKETPLACE_MAP.length; i++) {
-
         var rule = TIMEZONE_MARKETPLACE_MAP[i];
-
-        if (
-            rule.prefix &&
-            timeZone.indexOf(rule.prefix) === 0
-        ) {
-            return rule.code;
-        }
-
-        if (
-            rule.zones &&
-            rule.zones.indexOf(timeZone) !== -1
-        ) {
-            return rule.code;
-        }
+        if (rule.prefix && timeZone.indexOf(rule.prefix) === 0) return rule.code;
+        if (rule.zones && rule.zones.indexOf(timeZone) !== -1) return rule.code;
     }
 
-
-    // ---------------------------------------------------------------
-    // 2. Timezone was ambiguous/unrecognised.
-    //    Use browser language as a weaker secondary signal.
-    // ---------------------------------------------------------------
-
-    var lang =
-        (
-            navigator.language ||
-            navigator.userLanguage ||
-            ''
-        ).toLowerCase();
-
-
+    var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
     if (lang === 'en-au') return 'AU';
-
     if (lang === 'en-gb') return 'UK';
-
     if (lang === 'en-ie') return 'IE';
-
-    if (
-        lang === 'en-ca' ||
-        lang === 'fr-ca'
-    ) {
-        return 'CA';
-    }
-
+    if (lang === 'en-ca' || lang === 'fr-ca') return 'CA';
     if (lang === 'es-mx') return 'MX';
-
     if (lang === 'pt-br') return 'BR';
-
-    if (
-        lang === 'de' ||
-        lang === 'de-de' ||
-        lang === 'de-at' ||
-        lang === 'de-ch'
-    ) {
-        return 'DE';
-    }
-
-    if (
-        lang === 'fr' ||
-        lang === 'fr-fr' ||
-        lang === 'fr-be'
-    ) {
-        return 'FR';
-    }
-
-    if (
-        lang === 'es' ||
-        lang === 'es-es'
-    ) {
-        return 'ES';
-    }
-
-    if (
-        lang === 'it' ||
-        lang === 'it-it'
-    ) {
-        return 'IT';
-    }
-
-    if (
-        lang === 'nl' ||
-        lang === 'nl-nl' ||
-        lang === 'nl-be'
-    ) {
-        return 'NL';
-    }
-
-    if (
-        lang === 'pl' ||
-        lang === 'pl-pl'
-    ) {
-        return 'PL';
-    }
-
-    if (
-        lang === 'sv' ||
-        lang === 'sv-se'
-    ) {
-        return 'SE';
-    }
-
-    if (
-        lang === 'tr' ||
-        lang === 'tr-tr'
-    ) {
-        return 'TR';
-    }
-
-    if (
-        lang === 'hi' ||
-        lang === 'hi-in'
-    ) {
-        return 'IN';
-    }
-
-    if (
-        lang === 'ja' ||
-        lang === 'ja-jp'
-    ) {
-        return 'JP';
-    }
-
-    if (
-        lang === 'zh-sg' ||
-        lang === 'en-sg'
-    ) {
-        return 'SG';
-    }
-
+    if (lang === 'de' || lang === 'de-de' || lang === 'de-at' || lang === 'de-ch') return 'DE';
+    if (lang === 'fr' || lang === 'fr-fr' || lang === 'fr-be') return 'FR';
+    if (lang === 'es' || lang === 'es-es') return 'ES';
+    if (lang === 'it' || lang === 'it-it') return 'IT';
+    if (lang === 'nl' || lang === 'nl-nl' || lang === 'nl-be') return 'NL';
+    if (lang === 'pl' || lang === 'pl-pl') return 'PL';
+    if (lang === 'sv' || lang === 'sv-se') return 'SE';
+    if (lang === 'tr' || lang === 'tr-tr') return 'TR';
+    if (lang === 'hi' || lang === 'hi-in') return 'IN';
+    if (lang === 'ja' || lang === 'ja-jp') return 'JP';
+    if (lang === 'zh-sg' || lang === 'en-sg') return 'SG';
     if (lang === 'ar-ae') return 'AE';
-
     if (lang === 'ar-sa') return 'SA';
-
     if (lang === 'ar-eg') return 'EG';
-
     if (lang === 'en-za') return 'ZA';
-
-
-    // ---------------------------------------------------------------
-    // 3. Final fallback.
-    //
-    // US means "leave the existing link alone".
-    // ---------------------------------------------------------------
 
     return 'US';
 }
 
-
 // =====================================================================
 // AMAZON LINK LOCALIZATION
 // =====================================================================
-
-// Handles both:
-//   https://www.amazon.com/dp/B082KKRH1Z
-//   https://www.amazon.com/gp/product/B01F02A89K
-//
-// The leading slash makes this more precise without changing the
-// behaviour for the Amazon URL formats used on the pages.
-var ASIN_PATTERN =
-    /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&]|$)/i;
-
+var ASIN_PATTERN = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&]|$)/i;
 
 function extractAsinFromElement(el) {
-
-    // First use an explicit data-asin attribute if present.
-    if (
-        el.dataset &&
-        el.dataset.asin
-    ) {
-        return el.dataset.asin.toUpperCase();
-    }
-
-
-    // Otherwise extract the ASIN from the href.
-    var href =
-        el.getAttribute('href') || '';
-
-    var match =
-        href.match(ASIN_PATTERN);
-
-    if (match) {
-        return match[1].toUpperCase();
-    }
-
+    if (el.dataset && el.dataset.asin) return el.dataset.asin.toUpperCase();
+    var href = el.getAttribute('href') || '';
+    var match = href.match(ASIN_PATTERN);
+    if (match) return match[1].toUpperCase();
     return null;
 }
 
-
-// =====================================================================
-// APPLY AMAZON LINK
-//
-// IMPORTANT:
-// Attribution has absolute priority.
-//
-// If an Attribution URL exists for the ASIN + marketplace, this
-// function sets that URL and RETURNS immediately. The ordinary local
-// Amazon fallback therefore cannot overwrite it.
-//
-// If no Attribution URL exists, the function constructs a normal
-// Amazon marketplace URL such as:
-//
-//   https://www.amazon.com.au/dp/B01F02A89K
-//
-// If the marketplace is unknown, the original URL is untouched.
-// =====================================================================
-
-function applyAmazonLink(
-    el,
-    asin,
-    marketplaceCode
-) {
-
+function applyAmazonLink(el, asin, marketplaceCode) {
     if (!asin) return;
-
     asin = asin.toUpperCase();
 
-
-    // ---------------------------------------------------------------
-    // PRIORITY 1: AMAZON ATTRIBUTION URL
-    // ---------------------------------------------------------------
-
-    var attributionEntry =
-        AMAZON_ATTRIBUTION[asin];
-
-    if (
-        attributionEntry &&
-        attributionEntry[marketplaceCode]
-    ) {
-
-        var attributionUrl =
-            attributionEntry[marketplaceCode];
-
-        el.setAttribute(
-            'href',
-            attributionUrl
-        );
-
-        console.log(
-            'Amazon Attribution applied:',
-            asin,
-            '->',
-            marketplaceCode,
-            attributionUrl
-        );
-
-        // CRITICAL: prevents fallback from overwriting attribution.
+    var attributionEntry = AMAZON_ATTRIBUTION[asin];
+    if (attributionEntry && attributionEntry[marketplaceCode]) {
+        el.setAttribute('href', attributionEntry[marketplaceCode]);
+        console.log('Amazon Attribution applied:', asin, '->', marketplaceCode);
         return;
     }
 
-
-    // ---------------------------------------------------------------
-    // PRIORITY 2: NORMAL LOCAL AMAZON STORE
-    // ---------------------------------------------------------------
-
-    var amazonDomain =
-        AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
-
+    var amazonDomain = AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
     if (amazonDomain) {
-
-        var localUrl =
-            'https://' +
-            amazonDomain +
-            '/dp/' +
-            asin;
-
-        el.setAttribute(
-            'href',
-            localUrl
-        );
-
-        console.log(
-            'Local Amazon marketplace applied:',
-            asin,
-            '->',
-            marketplaceCode,
-            localUrl
-        );
-
+        var localUrl = 'https://' + amazonDomain + '/dp/' + asin;
+        el.setAttribute('href', localUrl);
+        console.log('Local Amazon marketplace applied:', asin, '->', marketplaceCode);
         return;
     }
 
-
-    // ---------------------------------------------------------------
-    // PRIORITY 3: NO KNOWN MARKETPLACE
-    // ---------------------------------------------------------------
-
-    console.log(
-        'No Amazon marketplace available:',
-        asin,
-        marketplaceCode
-    );
+    console.log('No Amazon marketplace available:', asin, marketplaceCode);
 }
-
-
-// =====================================================================
-// REWRITE AMAZON LINKS
-// =====================================================================
 
 function rewriteAmazonLinks(marketplaceCode) {
     document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
         var originalHref = el.getAttribute('href') || '';
         var asin = extractAsinFromElement(el);
-
         if (!asin) {
             console.log('Amazon link found but no ASIN:', originalHref);
             return;
         }
-
-        //console.log('Amazon link:',originalHref,'ASIN:',asin,'Marketplace:',marketplaceCode);
-
         applyAmazonLink(el, asin, marketplaceCode);
     });
-}
-
-function applyAmazonLink(el, asin, marketplaceCode) {
-    var entry = AMAZON_ATTRIBUTION[asin];
-
-    // 1. Attribution URL always takes priority
-    if (entry && entry[marketplaceCode]) {
-        el.setAttribute('href', entry[marketplaceCode]);
-        console.log(
-            'Using Attribution URL for ASIN ' + asin +
-            ' -> ' + marketplaceCode
-        );
-        return;
-    }
-
-    // 2. No Attribution URL: use the normal local Amazon store
-    var domain = AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
-
-    if (domain) {
-        var localUrl = 'https://' + domain + '/dp/' + asin;
-        el.setAttribute('href', localUrl);
-
-        console.log(
-            'Using local Amazon URL for ASIN ' + asin +
-            ' -> ' + localUrl
-        );
-        return;
-    }
-
-    // 3. No known marketplace: leave the original link alone
 }
 
 // =====================================================================
@@ -647,9 +253,7 @@ function updateMetaBrowserBanner() {
     var container = document.querySelector(BrowserBannerContainer);
     if (!container) return;
     var divider = document.querySelector(BrowserBannerDivider);
-
     var showBanner = isMetaInAppBrowser();
-
     container.style.setProperty('display', showBanner ? 'block' : 'none', 'important');
     if (divider) {
         divider.style.setProperty('display', showBanner ? 'block' : 'none', 'important');
@@ -662,11 +266,6 @@ window.addEventListener('load', updateMetaBrowserBanner);
 // =====================================================================
 document.addEventListener('DOMContentLoaded', function() {
 
-    // Localize Amazon links before anything else. Buy-button click
-    // handlers read `this.href` live at click time, so as long as this
-    // runs on page load (well before a human can click), the pixel and
-    // the navigation automatically pick up the corrected URL with no
-    // special-casing needed in the button logic below.
     var marketplaceCode = inferMarketplaceCode();
     console.log('Inferred marketplace:', marketplaceCode);
 
@@ -713,16 +312,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // -------------------------------------------
     // Buy button(s)
+    //
+    // IMPORTANT CHANGE: no e.preventDefault() any more, and no manual
+    // window.location.assign(). The click is left as a genuine native
+    // anchor navigation -- following the href already localized by
+    // rewriteAmazonLinks() on page load -- so iOS/Android can treat it
+    // as a trusted user gesture eligible for Universal Links / App
+    // Links and open the Amazon app directly where one is installed.
+    //
+    // The pixel still fires reliably: all listener code below runs to
+    // completion before the browser processes the link's default
+    // action, so InitiateCheckout is fully queued before navigation
+    // can even begin -- no race condition, no artificial delay needed.
     // -------------------------------------------
     function attachBuyButton(selector) {
         var button = document.querySelector(selector);
         if (!button) return;
 
         button.addEventListener('click', function(e) {
-            e.preventDefault();
             console.log('Pixel running... (' + selector + ')');
 
-            var destination = this.href; // reflects any localization applied above
+            var destination = this.href; // kept for logging / stall-detection only
 
             button.style.pointerEvents = 'none';
 
@@ -751,6 +361,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Meta Pixel error:', err);
             }
 
+            // General safety net: fires only if the page is somehow
+            // still here 2s later (i.e. native navigation never
+            // actually happened at all).
             setTimeout(function() {
                 if (typeof clarity === 'function') {
                     clarity('event', 'nav_stalled');
@@ -758,7 +371,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.warn('Navigation appears to have stalled:', destination);
             }, 2000);
 
-            window.location.assign(destination);
+            // No e.preventDefault(), no window.location.assign() --
+            // the browser's own default action for this click is what
+            // we are now deliberately relying on.
         });
     }
 
