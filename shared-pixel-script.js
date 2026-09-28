@@ -3,17 +3,89 @@
 // (see deployment notes) from each Carrd page, AFTER that page's own
 // local configuration variables have been declared.
 //
-// This file assumes the following variables already exist in global
-// scope by the time it runs (declared in each page's own <head>):
+// REQUIRED per-page variables (declared with `var` in the page <head>):
 //   PIXEL_ID, BOOK_NAME, BOOK_PRICE, BOOK_ASIN, SERIES_URL,
 //   bookTags, reviewTags, seriesTags, buyButtonTags,
 //   BrowserBannerContainer, BrowserBannerDivider
 //
+// OPTIONAL per-page variables (pages that omit them behave as before):
+//   GOOGLE_ADS_ID                 e.g. 'AW-993658037'
+//   GOOGLE_BEGIN_CHECKOUT_LABEL   label from the Google Ads "Begin checkout"
+//                                 conversion action (the part after the slash
+//                                 in send_to: 'AW-xxxx/LABEL')
+//   GOOGLE_NAV_MODE               'native' (default) or 'callback'
+//   UNKNOWN_SOURCE_ATTRIBUTION    'meta' (default) or 'none'
+//
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
-console.log('Pixel script loaded... v1.05');
+console.log('Pixel script loaded... v1.06');
 
 var TRACKED_ATTR = 'data-vc-tracked';
+
+// =====================================================================
+// OPTIONAL CONFIG (safe when a page has not declared these)
+// =====================================================================
+function optionalConfig(name, fallback) {
+    var v = window[name];
+    return (typeof v === 'undefined' || v === null || v === '') ? fallback : v;
+}
+
+var googleAdsId = optionalConfig('GOOGLE_ADS_ID', '');
+var googleBeginCheckoutLabel = optionalConfig('GOOGLE_BEGIN_CHECKOUT_LABEL', '');
+var googleNavMode = optionalConfig('GOOGLE_NAV_MODE', 'native');
+var unknownSourceAttribution = optionalConfig('UNKNOWN_SOURCE_ATTRIBUTION', 'meta');
+
+// =====================================================================
+// BROWSER DETECTION HELPER
+// =====================================================================
+function getUA() {
+    return navigator.userAgent || navigator.vendor || window.opera || '';
+}
+
+function isMetaInAppBrowser() {
+    return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram/i.test(getUA());
+}
+
+// =====================================================================
+// TRAFFIC SOURCE DETECTION
+//
+// Returns 'google', 'meta' or 'other'.
+//
+// Order of evidence:
+//   1. Explicit utm_source (set by you in the ad's URL parameters)
+//   2. Click IDs the ad platforms add themselves
+//        Google: gclid / gbraid / wbraid     Meta: fbclid
+//   3. Running inside Facebook/Instagram's in-app browser
+//   4. Otherwise 'other'
+//
+// document.referrer is deliberately NOT used: an organic Google Search
+// visitor has a Google referrer too, and would wrongly fire Google Ads
+// conversions.
+// =====================================================================
+function detectTrafficSource() {
+    var params = null;
+    try {
+        params = new URLSearchParams(window.location.search);
+    } catch (err) {
+        params = null;
+    }
+
+    if (params) {
+        var utm = (params.get('utm_source') || '').toLowerCase();
+        if (['google', 'googleads', 'google_ads', 'adwords', 'gads'].indexOf(utm) !== -1) return 'google';
+        if (['facebook', 'fb', 'instagram', 'ig', 'meta', 'threads'].indexOf(utm) !== -1) return 'meta';
+
+        if (params.has('gclid') || params.has('gbraid') || params.has('wbraid')) return 'google';
+        if (params.has('fbclid')) return 'meta';
+    }
+
+    if (isMetaInAppBrowser()) return 'meta';
+
+    return 'other';
+}
+
+var TRAFFIC_SOURCE = detectTrafficSource();
+console.log('Traffic source detected:', TRAFFIC_SOURCE);
 
 // =====================================================================
 // VISITOR EXTERNAL ID
@@ -26,44 +98,117 @@ if (!externalId) {
 
 // =====================================================================
 // META PIXEL BASE CODE
+// Loaded for everything EXCEPT visits positively identified as Google,
+// so existing Meta/other behaviour is unchanged.
 // =====================================================================
-!function(f, b, e, v, n, t, s) {
-    if (f.fbq) return;
-    n = f.fbq = function() {
-        n.callMethod ?
-            n.callMethod.apply(n, arguments) : n.queue.push(arguments)
-    };
-    if (!f._fbq) f._fbq = n;
-    n.push = n;
-    n.loaded = !0;
-    n.version = '2.0';
-    n.queue = [];
-    t = b.createElement(e);
-    t.async = !0;
-    t.src = v;
-    s = b.getElementsByTagName(e)[0];
-    s.parentNode.insertBefore(t, s)
-}(window, document, 'script',
-    'https://connect.facebook.net/en_US/fbevents.js');
+if (TRAFFIC_SOURCE !== 'google') {
+    !function(f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function() {
+            n.callMethod ?
+                n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = '2.0';
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s)
+    }(window, document, 'script',
+        'https://connect.facebook.net/en_US/fbevents.js');
 
-fbq('init', PIXEL_ID, { external_id: externalId });
-fbq('track', 'PageView');
+    fbq('init', PIXEL_ID, { external_id: externalId });
+    fbq('track', 'PageView');
 
-fbq('track', 'ViewContent', {
-    content_ids: [BOOK_ASIN],
-    content_type: 'product',
-    content_name: BOOK_NAME
-});
-
-// =====================================================================
-// BROWSER DETECTION HELPER
-// =====================================================================
-function getUA() {
-    return navigator.userAgent || navigator.vendor || window.opera || '';
+    fbq('track', 'ViewContent', {
+        content_ids: [BOOK_ASIN],
+        content_type: 'product',
+        content_name: BOOK_NAME
+    });
 }
 
-function isMetaInAppBrowser() {
-    return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram/i.test(getUA());
+// =====================================================================
+// GOOGLE TAG (gtag.js)
+// Only loaded for visits identified as Google, and only if the page
+// supplies a GOOGLE_ADS_ID.
+// =====================================================================
+if (TRAFFIC_SOURCE === 'google' && googleAdsId) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function() {
+        window.dataLayer.push(arguments);
+    };
+
+    var gtagLoader = document.createElement('script');
+    gtagLoader.async = true;
+    gtagLoader.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(googleAdsId);
+    document.head.appendChild(gtagLoader);
+
+    window.gtag('js', new Date());
+    window.gtag('config', googleAdsId);
+}
+
+// =====================================================================
+// CHECKOUT-INITIATED EVENTS (one per platform)
+// =====================================================================
+function sendMetaInitiateCheckout() {
+    console.log('...trying InitiateCheckout pixel');
+    try {
+        if (typeof fbq === 'function') {
+            fbq('track', 'InitiateCheckout', {
+                content_name: BOOK_NAME,
+                content_category: 'Book',
+                value: BOOK_PRICE,
+                currency: 'USD'
+            });
+            console.log('...InitiateCheckout pixel sent');
+        } else {
+            console.log('...InitiateCheckout pixel NOT SENT');
+        }
+    } catch (err) {
+        console.error('Meta Pixel error:', err);
+    }
+}
+
+// Optional callback is invoked by Google's tag once the event has been
+// sent (used only in GOOGLE_NAV_MODE = 'callback').
+function sendGoogleBeginCheckout(callback) {
+    try {
+        if (typeof window.gtag !== 'function' || !googleAdsId) {
+            console.log('...Google tag NOT SENT (tag not initialised)');
+            if (callback) callback();
+            return;
+        }
+        if (!googleBeginCheckoutLabel) {
+            console.warn('...Google conversion NOT SENT: GOOGLE_BEGIN_CHECKOUT_LABEL is not set');
+            if (callback) callback();
+            return;
+        }
+
+        var payload = {
+            send_to: googleAdsId + '/' + googleBeginCheckoutLabel,
+            value: BOOK_PRICE,
+            currency: 'USD'
+        };
+        if (callback) payload.event_callback = callback;
+
+        window.gtag('event', 'conversion', payload);
+        console.log('...Google Ads begin_checkout conversion sent');
+    } catch (err) {
+        console.error('Google tag error:', err);
+        if (callback) callback();
+    }
+}
+
+function trackInitiateCheckout() {
+    if (TRAFFIC_SOURCE === 'google') {
+        sendGoogleBeginCheckout();
+    } else {
+        sendMetaInitiateCheckout();
+    }
 }
 
 // =====================================================================
@@ -79,7 +224,8 @@ function normalizeSelectorList(value) {
 }
 
 // =====================================================================
-// AMAZON MARKETPLACE ATTRIBUTION DATA
+// AMAZON MARKETPLACE ATTRIBUTION DATA -- META (and default traffic)
+// Structure: AMAZON_ATTRIBUTION[ASIN][MARKETPLACE_CODE] = full URL
 // =====================================================================
 var AMAZON_ATTRIBUTION = {
     'B01F02A89K': {
@@ -117,6 +263,30 @@ var AMAZON_ATTRIBUTION = {
         'DE': 'https://www.amazon.de/Gesang-Sirenen-Erster-Kontakt-German-ebook/dp/B0HD3RRKHM?maas=maas_adg_A1F7976349D9199A1458CBA94A9ED31C_afap_abs&ref_=aa_maas&tag=maas'
     }
 };
+
+// =====================================================================
+// AMAZON MARKETPLACE ATTRIBUTION DATA -- GOOGLE
+// Same structure as above. Fill this in from a separate Amazon
+// Attribution export made for Google ad groups. Until an ASIN +
+// marketplace has an entry here, Google visitors get the plain store
+// link (never the Meta tag), so Google purchases can't be credited to
+// Meta ad groups.
+// =====================================================================
+var AMAZON_ATTRIBUTION_GOOGLE = {
+    // 'B0H67Q8TLR': {
+    //     'US': 'https://www.amazon.com/.../dp/B0H67Q8TLR?maas=...',
+    //     'CA': '...',
+    //     'UK': '...'
+    // }
+};
+
+function getAttributionTable() {
+    if (TRAFFIC_SOURCE === 'google') return AMAZON_ATTRIBUTION_GOOGLE;
+    if (TRAFFIC_SOURCE === 'meta') return AMAZON_ATTRIBUTION;
+    // 'other' traffic: 'meta' preserves the original behaviour;
+    // 'none' gives untagged plain store links.
+    return (unknownSourceAttribution === 'meta') ? AMAZON_ATTRIBUTION : {};
+}
 
 // =====================================================================
 // MARKETPLACE INFERENCE + AMAZON FALLBACK
@@ -216,13 +386,15 @@ function applyAmazonLink(el, asin, marketplaceCode) {
     if (!asin) return;
     asin = asin.toUpperCase();
 
-    var attributionEntry = AMAZON_ATTRIBUTION[asin];
+    // 1. Attribution URL for this traffic source, if one exists.
+    var attributionEntry = getAttributionTable()[asin];
     if (attributionEntry && attributionEntry[marketplaceCode]) {
         el.setAttribute('href', attributionEntry[marketplaceCode]);
-        console.log('Amazon Attribution applied:', asin, '->', marketplaceCode);
+        console.log('Amazon Attribution applied (' + TRAFFIC_SOURCE + '):', asin, '->', marketplaceCode);
         return;
     }
 
+    // 2. Otherwise the plain local store link (no attribution tag).
     var amazonDomain = AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
     if (amazonDomain) {
         var localUrl = 'https://' + amazonDomain + '/dp/' + asin;
@@ -266,6 +438,12 @@ window.addEventListener('load', updateMetaBrowserBanner);
 // =====================================================================
 document.addEventListener('DOMContentLoaded', function() {
 
+    // Tag Clarity recordings with the traffic source so sessions can be
+    // filtered Google vs Meta. (Clarity's stub is defined by now.)
+    if (typeof clarity === 'function') {
+        clarity('set', 'traffic_source', TRAFFIC_SOURCE);
+    }
+
     var marketplaceCode = inferMarketplaceCode();
     console.log('Inferred marketplace:', marketplaceCode);
 
@@ -274,6 +452,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
 
     function trackViewContent(contentName, contentCategory) {
+        // Meta-only engagement event; Google visits don't load the Meta pixel.
+        if (TRAFFIC_SOURCE === 'google') return;
         try {
             if (typeof fbq === 'function') {
                 fbq('track', 'ViewContent', {
@@ -313,26 +493,36 @@ document.addEventListener('DOMContentLoaded', function() {
     // -------------------------------------------
     // Buy button(s)
     //
-    // IMPORTANT CHANGE: no e.preventDefault() any more, and no manual
-    // window.location.assign(). The click is left as a genuine native
-    // anchor navigation -- following the href already localized by
-    // rewriteAmazonLinks() on page load -- so iOS/Android can treat it
-    // as a trusted user gesture eligible for Universal Links / App
-    // Links and open the Amazon app directly where one is installed.
+    // Default: no e.preventDefault() and no manual navigation. The click
+    // is left as a genuine native anchor navigation, following the href
+    // already localized by rewriteAmazonLinks(), so iOS/Android can treat
+    // it as a trusted user gesture eligible for Universal Links / App
+    // Links.
     //
-    // The pixel still fires reliably: all listener code below runs to
-    // completion before the browser processes the link's default
-    // action, so InitiateCheckout is fully queued before navigation
-    // can even begin -- no race condition, no artificial delay needed.
+    // Exception: Google traffic with GOOGLE_NAV_MODE = 'callback'. That
+    // holds navigation until Google's tag confirms the conversion was
+    // sent (Google's documented pattern for click conversions), with a
+    // 1s fallback so a blocked tag can never strand the visitor.
     // -------------------------------------------
     function attachBuyButton(selector) {
         var button = document.querySelector(selector);
         if (!button) return;
 
         button.addEventListener('click', function(e) {
-            console.log('Pixel running... (' + selector + ')');
+            console.log('Pixel running... (' + selector + ') [' + TRAFFIC_SOURCE + ']');
 
-            var destination = this.href; // kept for logging / stall-detection only
+            var destination = this.href;
+
+            var holdForGoogle = (
+                TRAFFIC_SOURCE === 'google' &&
+                googleNavMode === 'callback' &&
+                googleAdsId &&
+                googleBeginCheckoutLabel
+            );
+
+            if (holdForGoogle) {
+                e.preventDefault();
+            }
 
             button.style.pointerEvents = 'none';
 
@@ -344,36 +534,27 @@ document.addEventListener('DOMContentLoaded', function() {
             button.style.transition = 'opacity 0.25s ease';
             button.style.opacity = '0.6';
 
-            console.log('...trying InitiateCheckout pixel');
-            try {
-                if (typeof fbq === 'function') {
-                    fbq('track', 'InitiateCheckout', {
-                        content_name: BOOK_NAME,
-                        content_category: 'Book',
-                        value: BOOK_PRICE,
-                        currency: 'USD'
-                    });
-                    console.log('...InitiateCheckout pixel sent');
-                } else {
-                    console.log('...InitiateCheckout pixel NOT SENT');
-                }
-            } catch (err) {
-                console.error('Meta Pixel error:', err);
+            if (holdForGoogle) {
+                var navigated = false;
+                var go = function() {
+                    if (navigated) return;
+                    navigated = true;
+                    window.location.assign(destination);
+                };
+                sendGoogleBeginCheckout(go);
+                setTimeout(go, 1000);
+            } else {
+                trackInitiateCheckout();
             }
 
             // General safety net: fires only if the page is somehow
-            // still here 2s later (i.e. native navigation never
-            // actually happened at all).
+            // still here 2s later (i.e. navigation never happened).
             setTimeout(function() {
                 if (typeof clarity === 'function') {
                     clarity('event', 'nav_stalled');
                 }
                 console.warn('Navigation appears to have stalled:', destination);
             }, 2000);
-
-            // No e.preventDefault(), no window.location.assign() --
-            // the browser's own default action for this click is what
-            // we are now deliberately relying on.
         });
     }
 
