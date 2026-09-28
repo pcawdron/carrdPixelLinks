@@ -18,7 +18,7 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
-console.log('Pixel script loaded... v1.06');
+console.log('Pixel script loaded... v1.07');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -273,11 +273,21 @@ var AMAZON_ATTRIBUTION = {
 // Meta ad groups.
 // =====================================================================
 var AMAZON_ATTRIBUTION_GOOGLE = {
-    // 'B0H67Q8TLR': {
-    //     'US': 'https://www.amazon.com/.../dp/B0H67Q8TLR?maas=...',
-    //     'CA': '...',
-    //     'UK': '...'
-    // }
+    'B01F02A89K': {
+        'CA': 'https://www.amazon.ca/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_FEC1CB78D0884A3B05EE82EE9A367037_afap_abs&ref_=aa_maas&tag=maas',
+        'UK': 'https://www.amazon.co.uk/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_C200244271ACA15A6AC0473C5A2BD374_afap_abs&ref_=aa_maas&tag=maas',
+        'US': 'https://www.amazon.com/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_726EBF70325583E7C094884854129B9D_afap_abs&ref_=aa_maas&tag=maas'
+    },
+    'B0CYH2F9Y4': {
+        'CA': 'https://www.amazon.ca/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_A597F7652E4CBCD9C2D088978292CCB3_afap_abs&ref_=aa_maas&tag=maas',
+        'UK': 'https://www.amazon.co.uk/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_A0B0BD87F3B94EB5AECFBEAD37AA131B_afap_abs&ref_=aa_maas&tag=maas',
+        'US': 'https://www.amazon.com/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_4CD48F62AE95750B00BBAB7F78EA5AA2_afap_abs&ref_=aa_maas&tag=maas'
+    },
+    'B0H67Q8TLR': {
+        'CA': 'https://www.amazon.ca/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_CA941762A7E19CA5494B4554F02E8174_afap_abs&ref_=aa_maas&tag=maas',
+        'UK': 'https://www.amazon.co.uk/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_8398B9A85F4186347F761A0C3BA86CC5_afap_abs&ref_=aa_maas&tag=maas',
+        'US': 'https://www.amazon.com/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_682FCA6FF3336AE9CCACEA28A2FFF976_afap_abs&ref_=aa_maas&tag=maas'
+    }
 };
 
 function getAttributionTable() {
