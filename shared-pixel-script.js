@@ -16,9 +16,30 @@
 //   GOOGLE_NAV_MODE               'native' (default) or 'callback'
 //   UNKNOWN_SOURCE_ATTRIBUTION    'meta' (default) or 'none'
 //
-// <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
+// <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@main/shared-pixel-script.min.js"></script>
+//
+// CHANGES IN 1.08
+//   - Checkout (Meta InitiateCheckout / Google begin_checkout) fires once
+//     per visit per book, not once per tap.
+//   - New Clarity smart event 'returned_from_amazon' when a visitor comes
+//     back to this page after tapping buy, plus a Clarity tag
+//     'amazon_away' bucketing how long they were gone.
+//   - 'nav_stalled' no longer fires falsely when the Amazon app opened
+//     (the page is hidden then, not stalled).
+//   - Buy button label and appearance are restored when a visitor returns.
+//
+// CHANGES IN 1.07
+//   - Fallback links now actually use ASIN_SLUG_CACHE
+//     ('/Book-Title/dp/ASIN' instead of '/dp/ASIN'). In 1.06 the cache
+//     was built but never read.
+//   - Links are localized as soon as the DOM is ready (the 500ms delay
+//     is gone), and the buy button re-localizes its own href at click
+//     time, so a fast click can never fall through to the hard-coded
+//     amazon.com link.
+//   - Ireland now maps to amazon.co.uk (it previously mapped to 'IE',
+//     which has no Amazon store, so Irish visitors kept amazon.com).
 // =====================================================================
-console.log('Pixel script 1.06');
+console.log('Pixel script 1.08');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -89,11 +110,17 @@ console.log('Traffic source detected:', TRAFFIC_SOURCE);
 
 // =====================================================================
 // VISITOR EXTERNAL ID
+// (wrapped in try/catch: some in-app browsers / private modes throw)
 // =====================================================================
-var externalId = localStorage.getItem('meta_external_id');
-if (!externalId) {
+var externalId = null;
+try {
+    externalId = localStorage.getItem('meta_external_id');
+    if (!externalId) {
+        externalId = 'user_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+        localStorage.setItem('meta_external_id', externalId);
+    }
+} catch (err) {
     externalId = 'user_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
-    localStorage.setItem('meta_external_id', externalId);
 }
 
 // =====================================================================
@@ -212,6 +239,89 @@ function trackInitiateCheckout() {
 }
 
 // =====================================================================
+// SESSION HELPERS (sessionStorage lasts for this browser tab only;
+// wrapped in try/catch because some in-app browsers throw)
+// =====================================================================
+var memoryStore = {};
+
+function sessionGet(key) {
+    try {
+        var v = sessionStorage.getItem(key);
+        if (v !== null) return v;
+    } catch (err) {}
+    return memoryStore.hasOwnProperty(key) ? memoryStore[key] : null;
+}
+
+function sessionSet(key, value) {
+    memoryStore[key] = value;
+    try { sessionStorage.setItem(key, value); } catch (err) {}
+}
+
+function sessionRemove(key) {
+    delete memoryStore[key];
+    try { sessionStorage.removeItem(key); } catch (err) {}
+}
+
+// =====================================================================
+// CHECKOUT: ONCE PER VISIT
+// The first buy tap in this tab sends the checkout event; later taps
+// (double taps, coming back and tapping again) still go to Amazon but
+// are not counted again.
+// =====================================================================
+var CHECKOUT_SENT_KEY = 'vc_checkout_sent_' + BOOK_ASIN;
+
+function checkoutAlreadySent() {
+    return sessionGet(CHECKOUT_SENT_KEY) === '1';
+}
+
+function markCheckoutSent() {
+    sessionSet(CHECKOUT_SENT_KEY, '1');
+}
+
+// =====================================================================
+// RETURNED FROM AMAZON
+// When the buy button is tapped we note the time. If the visitor is
+// later back looking at this page, we send the Clarity smart event
+// 'returned_from_amazon' and tag the session with how long they were
+// away. Covers all three ways of coming back:
+//   - the tab becomes visible again (e.g. back from the Amazon app),
+//   - the page is restored from the back/forward cache,
+//   - the page is reloaded fresh in the same tab.
+// =====================================================================
+var AMAZON_LEFT_AT_KEY = 'vc_amazon_left_at';
+
+function markLeftForAmazon() {
+    sessionSet(AMAZON_LEFT_AT_KEY, String(Date.now()));
+}
+
+function awayBucket(seconds) {
+    if (seconds < 10) return 'under 10s';
+    if (seconds < 30) return '10-30s';
+    if (seconds < 120) return '30s-2m';
+    if (seconds < 600) return '2-10m';
+    return 'over 10m';
+}
+
+function checkReturnedFromAmazon() {
+    var leftAt = parseInt(sessionGet(AMAZON_LEFT_AT_KEY), 10);
+    if (!leftAt) return false;
+    var seconds = Math.round((Date.now() - leftAt) / 1000);
+    // Ignore the brief moment between the tap and the page going away.
+    if (seconds < 2) return false;
+    sessionRemove(AMAZON_LEFT_AT_KEY);
+    // Only count returns within an hour of the tap.
+    if (seconds > 3600) return false;
+
+    var bucket = awayBucket(seconds);
+    console.log('Returned from Amazon after ' + seconds + 's (' + bucket + ')');
+    if (typeof clarity === 'function') {
+        clarity('set', 'amazon_away', bucket);
+        clarity('event', 'returned_from_amazon');
+    }
+    return true;
+}
+
+// =====================================================================
 // SELECTOR HELPER
 // =====================================================================
 function normalizeSelectorList(value) {
@@ -266,11 +376,9 @@ var AMAZON_ATTRIBUTION = {
 
 // =====================================================================
 // AMAZON MARKETPLACE ATTRIBUTION DATA -- GOOGLE
-// Same structure as above. Fill this in from a separate Amazon
-// Attribution export made for Google ad groups. Until an ASIN +
-// marketplace has an entry here, Google visitors get the plain store
-// link (never the Meta tag), so Google purchases can't be credited to
-// Meta ad groups.
+// Same structure as above. Until an ASIN + marketplace has an entry
+// here, Google visitors get the plain store link (never the Meta tag),
+// so Google purchases can't be credited to Meta ad groups.
 // =====================================================================
 var AMAZON_ATTRIBUTION_GOOGLE = {
     'B01F02A89K': {
@@ -300,14 +408,8 @@ function getAttributionTable() {
 
 // =====================================================================
 // ASIN -> TITLE SLUG CACHE
-//
-// Derived from whichever attribution URLs we already have, regardless
-// of which table/marketplace they came from. Used so that even an
-// untagged fallback link (no attribution match for this ASIN +
-// marketplace) still looks like a normal canonical Amazon URL --
-// '/Some-Book-Title/dp/ASIN' -- instead of a bare '/dp/ASIN' link,
-// which is the pattern most associated with scraper/bot traffic and
-// may be more likely to trip Amazon's own defenses.
+// Built from the attribution URLs above, so untagged fallback links
+// look like Amazon's own canonical form: '/Book-Title/dp/ASIN'.
 // =====================================================================
 var ASIN_SLUG_CACHE = {};
 
@@ -349,7 +451,7 @@ var TIMEZONE_MARKETPLACE_MAP = [
     { prefix: 'Australia/', code: 'AU' },
     { prefix: 'Pacific/Auckland', code: 'AU' },
     { prefix: 'Europe/London', code: 'UK' },
-    { prefix: 'Europe/Dublin', code: 'IE' },
+    { prefix: 'Europe/Dublin', code: 'UK' },   // Ireland has no Amazon store; Irish Kindle buyers use .co.uk
     { prefix: 'Europe/Berlin', code: 'DE' },
     { prefix: 'Europe/Vienna', code: 'DE' },
     { prefix: 'Europe/Paris', code: 'FR' },
@@ -389,7 +491,7 @@ function inferMarketplaceCode() {
     var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
     if (lang === 'en-au') return 'AU';
     if (lang === 'en-gb') return 'UK';
-    if (lang === 'en-ie') return 'IE';
+    if (lang === 'en-ie') return 'UK';
     if (lang === 'en-ca' || lang === 'fr-ca') return 'CA';
     if (lang === 'es-mx') return 'MX';
     if (lang === 'pt-br') return 'BR';
@@ -412,10 +514,14 @@ function inferMarketplaceCode() {
     return 'US';
 }
 
+// Worked out once, up front, so every link and every click uses the same answer.
+var MARKETPLACE_CODE = inferMarketplaceCode();
+console.log('Inferred marketplace:', MARKETPLACE_CODE);
+
 // =====================================================================
 // AMAZON LINK LOCALIZATION
 // =====================================================================
-var ASIN_PATTERN = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&]|$)/i;
+var ASIN_PATTERN = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?=\/|[?&#]|$)/i;
 
 function extractAsinFromElement(el) {
     if (el.dataset && el.dataset.asin) return el.dataset.asin.toUpperCase();
@@ -425,36 +531,56 @@ function extractAsinFromElement(el) {
     return null;
 }
 
-function applyAmazonLink(el, asin, marketplaceCode) {
-    if (!asin) return;
+// Plain (untagged) store URL, in Amazon's canonical '/Title-Slug/dp/ASIN/' form
+// when we know the slug, otherwise '/dp/ASIN/'.
+function buildPlainAmazonUrl(asin, marketplaceCode) {
+    var amazonDomain = AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
+    if (!amazonDomain) return null;
+    var slug = ASIN_SLUG_CACHE[asin];
+    return 'https://' + amazonDomain + '/' + (slug ? slug + '/' : '') + 'dp/' + asin + '/';
+}
+
+function resolveAmazonUrl(asin, marketplaceCode) {
     asin = asin.toUpperCase();
 
     // 1. Attribution URL for this traffic source, if one exists.
     var attributionEntry = getAttributionTable()[asin];
     if (attributionEntry && attributionEntry[marketplaceCode]) {
-        el.setAttribute('href', attributionEntry[marketplaceCode]);
-        console.log('Amazon Attribution applied (' + TRAFFIC_SOURCE + '):', asin, '->', marketplaceCode);
-        return;
+        return { url: attributionEntry[marketplaceCode], kind: 'attribution' };
     }
 
     // 2. Otherwise the plain local store link (no attribution tag).
-    var amazonDomain = AMAZON_MARKETPLACE_DOMAINS[marketplaceCode];
-    if (amazonDomain) {
-        var localUrl = 'https://' + amazonDomain + '/dp/' + asin;
-        el.setAttribute('href', localUrl);
-        console.log('Local Amazon marketplace applied:', asin, '->', marketplaceCode);
+    var plain = buildPlainAmazonUrl(asin, marketplaceCode);
+    if (plain) return { url: plain, kind: 'plain' };
+
+    return null;
+}
+
+function applyAmazonLink(el, asin, marketplaceCode, quiet) {
+    if (!asin) return;
+    var resolved = resolveAmazonUrl(asin, marketplaceCode);
+    if (!resolved) {
+        if (!quiet) console.log('No Amazon marketplace available:', asin, marketplaceCode);
         return;
     }
-
-    console.log('No Amazon marketplace available:', asin, marketplaceCode);
+    // Remember the ASIN so it survives the href being rewritten.
+    if (el.dataset && !el.dataset.asin) el.dataset.asin = asin.toUpperCase();
+    el.setAttribute('href', resolved.url);
+    if (!quiet) {
+        console.log(
+            (resolved.kind === 'attribution'
+                ? 'Amazon Attribution applied (' + TRAFFIC_SOURCE + '):'
+                : 'Local Amazon marketplace applied:'),
+            asin, '->', marketplaceCode, resolved.url
+        );
+    }
 }
 
 function rewriteAmazonLinks(marketplaceCode) {
     document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
-        var originalHref = el.getAttribute('href') || '';
         var asin = extractAsinFromElement(el);
         if (!asin) {
-            console.log('Amazon link found but no ASIN:', originalHref);
+            console.log('Amazon link found but no ASIN:', el.getAttribute('href') || '');
             return;
         }
         applyAmazonLink(el, asin, marketplaceCode);
@@ -485,14 +611,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // filtered Google vs Meta. (Clarity's stub is defined by now.)
     if (typeof clarity === 'function') {
         clarity('set', 'traffic_source', TRAFFIC_SOURCE);
+        clarity('set', 'marketplace', MARKETPLACE_CODE);
     }
 
-    var marketplaceCode = inferMarketplaceCode();
-    console.log('Inferred marketplace:', marketplaceCode);
-
-    setTimeout(function() {
-        rewriteAmazonLinks(marketplaceCode);
-    }, 500);
+    // Carrd's links are in the static HTML, so they exist now: localize
+    // immediately rather than after a delay. Run once more on 'load' in
+    // case anything is injected late (quietly, it's idempotent).
+    rewriteAmazonLinks(MARKETPLACE_CODE);
+    window.addEventListener('load', function() {
+        document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
+            applyAmazonLink(el, extractAsinFromElement(el), MARKETPLACE_CODE, true);
+        });
+    });
 
     function trackViewContent(contentName, contentCategory) {
         // Meta-only engagement event; Google visits don't load the Meta pixel.
@@ -526,7 +656,12 @@ document.addEventListener('DOMContentLoaded', function() {
     attachViewContentListener(bookTags, BOOK_NAME, 'Book Image Click');
     attachViewContentListener(seriesTags, 'Series Info', 'Series');
 
-    document.querySelectorAll('a[href="' + SERIES_URL + '"]').forEach(function(link) {
+    // SERIES_URL links have been localized by now, so match them by the
+    // series ASIN rather than by the original href string.
+    var seriesAsinMatch = String(SERIES_URL).match(ASIN_PATTERN);
+    var seriesAsin = seriesAsinMatch ? seriesAsinMatch[1].toUpperCase() : null;
+    document.querySelectorAll('a[href*="amazon" i]').forEach(function(link) {
+        if (!seriesAsin || extractAsinFromElement(link) !== seriesAsin) return;
         if (link.closest('[' + TRACKED_ATTR + ']')) return;
         link.addEventListener('click', function() {
             trackViewContent('Series Info', 'Series');
@@ -537,26 +672,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // Buy button(s)
     //
     // Default: no e.preventDefault() and no manual navigation. The click
-    // is left as a genuine native anchor navigation, following the href
-    // already localized by rewriteAmazonLinks(), so iOS/Android can treat
+    // stays a genuine native anchor navigation so iOS/Android can treat
     // it as a trusted user gesture eligible for Universal Links / App
-    // Links.
+    // Links. The href is re-localized here first, so it is correct even
+    // if the visitor clicks before anything else has run.
     //
-    // Exception: Google traffic with GOOGLE_NAV_MODE = 'callback'. That
+    // Exception: Google traffic with GOOGLE_NAV_MODE = 'callback', which
     // holds navigation until Google's tag confirms the conversion was
-    // sent (Google's documented pattern for click conversions), with a
-    // 1s fallback so a blocked tag can never strand the visitor.
+    // sent, with a 1s fallback.
     // -------------------------------------------
     function attachBuyButton(selector) {
         var button = document.querySelector(selector);
-        if (!button) return;
+        if (!button) {
+            console.warn('Buy button not found:', selector);
+            return;
+        }
+
+        var labelEl = button.querySelector('.label');
+        button.dataset.vcOriginalLabel = labelEl ? labelEl.textContent : '';
 
         button.addEventListener('click', function(e) {
-            console.log('Pixel running... (' + selector + ') [' + TRAFFIC_SOURCE + ']');
+            applyAmazonLink(button, extractAsinFromElement(button) || BOOK_ASIN, MARKETPLACE_CODE, true);
+            var destination = button.href;
+            var firstCheckout = !checkoutAlreadySent();
+            console.log('Pixel running... (' + selector + ') [' + TRAFFIC_SOURCE + '] ' +
+                (firstCheckout ? '' : '(checkout already counted this visit) ') + '->', destination);
 
-            var destination = this.href;
+            markLeftForAmazon();
+            var pageLeft = false;
+            window.addEventListener('pagehide', function() { pageLeft = true; }, { once: true });
 
             var holdForGoogle = (
+                firstCheckout &&
                 TRAFFIC_SOURCE === 'google' &&
                 googleNavMode === 'callback' &&
                 googleAdsId &&
@@ -578,6 +725,7 @@ document.addEventListener('DOMContentLoaded', function() {
             button.style.opacity = '0.6';
 
             if (holdForGoogle) {
+                markCheckoutSent();
                 var navigated = false;
                 var go = function() {
                     if (navigated) return;
@@ -586,20 +734,57 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
                 sendGoogleBeginCheckout(go);
                 setTimeout(go, 1000);
-            } else {
+            } else if (firstCheckout) {
+                markCheckoutSent();
                 trackInitiateCheckout();
             }
 
-            // General safety net: fires only if the page is somehow
-            // still here 2s later (i.e. navigation never happened).
+            // Safety net: only a stall if, 2s later, the page is still
+            // open AND still on screen. If the Amazon app opened, the page
+            // is hidden rather than stalled, so nothing is reported.
             setTimeout(function() {
+                if (pageLeft || document.visibilityState !== 'visible') return;
                 if (typeof clarity === 'function') {
                     clarity('event', 'nav_stalled');
                 }
                 console.warn('Navigation appears to have stalled:', destination);
+                resetBuyButtons();
             }, 2000);
         });
     }
 
+    // Put the buy button(s) back to normal so a returning visitor can
+    // tap again.
+    function resetBuyButtons() {
+        normalizeSelectorList(buyButtonTags).forEach(function(selector) {
+            var button = document.querySelector(selector);
+            if (!button) return;
+            button.style.pointerEvents = '';
+            button.style.opacity = '';
+            var label = button.querySelector('.label');
+            if (label && button.dataset.vcOriginalLabel) {
+                label.textContent = button.dataset.vcOriginalLabel;
+            }
+        });
+    }
+
+    function handlePossibleReturn() {
+        if (checkReturnedFromAmazon()) resetBuyButtons();
+    }
+
+    // Back from the Amazon app, or switching back to this tab.
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') handlePossibleReturn();
+    });
+
+    // Restored from the back/forward cache (the Back button).
+    window.addEventListener('pageshow', function(evt) {
+        if (evt.persisted) handlePossibleReturn();
+    });
+
     normalizeSelectorList(buyButtonTags).forEach(attachBuyButton);
+
+    // Reloaded fresh in the same tab after visiting Amazon. Clarity's
+    // stub is defined by now, so the event is queued safely.
+    handlePossibleReturn();
 });
