@@ -18,7 +18,7 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@latest/shared-pixel-script.js"></script>
 // =====================================================================
-console.log('Pixel script loaded... v1.07');
+console.log('Pixel script 1.06');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -297,6 +297,39 @@ function getAttributionTable() {
     // 'none' gives untagged plain store links.
     return (unknownSourceAttribution === 'meta') ? AMAZON_ATTRIBUTION : {};
 }
+
+// =====================================================================
+// ASIN -> TITLE SLUG CACHE
+//
+// Derived from whichever attribution URLs we already have, regardless
+// of which table/marketplace they came from. Used so that even an
+// untagged fallback link (no attribution match for this ASIN +
+// marketplace) still looks like a normal canonical Amazon URL --
+// '/Some-Book-Title/dp/ASIN' -- instead of a bare '/dp/ASIN' link,
+// which is the pattern most associated with scraper/bot traffic and
+// may be more likely to trip Amazon's own defenses.
+// =====================================================================
+var ASIN_SLUG_CACHE = {};
+
+function firstAttributionUrl(entry) {
+    if (!entry) return null;
+    for (var code in entry) {
+        if (entry.hasOwnProperty(code)) return entry[code];
+    }
+    return null;
+}
+
+function cacheSlugsFromAttributionTable(table) {
+    for (var asin in table) {
+        if (!table.hasOwnProperty(asin) || ASIN_SLUG_CACHE[asin]) continue;
+        var anyUrl = firstAttributionUrl(table[asin]);
+        if (!anyUrl) continue;
+        var match = anyUrl.match(/^https:\/\/[^/]+\/([^/]+)\/dp\//i);
+        if (match) ASIN_SLUG_CACHE[asin] = match[1];
+    }
+}
+cacheSlugsFromAttributionTable(AMAZON_ATTRIBUTION);
+cacheSlugsFromAttributionTable(AMAZON_ATTRIBUTION_GOOGLE);
 
 // =====================================================================
 // MARKETPLACE INFERENCE + AMAZON FALLBACK
