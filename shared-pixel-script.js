@@ -18,6 +18,12 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@main/shared-pixel-script.min.js"></script>
 //
+// CHANGES IN 1.09
+//   - Local prices: the US price shown in the text of Amazon links/buttons
+//     (e.g. 'US 2.99', 'AmazonUS 2.99', '9.99 USD') is swapped for the
+//     visitor's store price from AMAZON_PRICING. If the book or store
+//     isn't listed, the text is left exactly as it is.
+//
 // CHANGES IN 1.08
 //   - Checkout (Meta InitiateCheckout / Google begin_checkout) fires once
 //     per visit per book, not once per tap.
@@ -39,7 +45,7 @@
 //   - Ireland now maps to amazon.co.uk (it previously mapped to 'IE',
 //     which has no Amazon store, so Irish visitors kept amazon.com).
 // =====================================================================
-console.log('Pixel script 1.08');
+console.log('Pixel script 1.09');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -398,6 +404,104 @@ var AMAZON_ATTRIBUTION_GOOGLE = {
     }
 };
 
+// =====================================================================
+// LOCAL STORE PRICES
+// Structure: AMAZON_PRICING[ASIN][MARKETPLACE_CODE] = price text.
+// The 'US' entry must match the price written on the Carrd page; it is
+// what gets found and replaced.
+// =====================================================================
+var AMAZON_PRICING = {
+    'B005OJF0ZC': {
+        'US': 'US 2.99',
+        'IN': '299 INR',
+        'UK': '2.26 GBP',
+        'DE': '2.99 EUR',
+        'FR': '2.99 EUR',
+        'ES': '2.99 EUR',
+        'IT': '2.99 EUR',
+        'NL': '2.99 EUR',
+        'JP': '499 JPY',
+        'BR': '15 BRL',
+        'CA': '4.99 CAD',
+        'MX': '49.99 MXN',
+        'AU': '4.99 AUD'
+    },
+    'B0H67Q8TLR': {
+        'US': 'US 9.99',
+        'IN': '599 INR',
+        'UK': '7.99 GBP',
+        'DE': '8.99 EUR',
+        'FR': '8.99 EUR',
+        'ES': '8.99 EUR',
+        'IT': '8.99 EUR',
+        'NL': '8.99 EUR',
+        'JP': '1579 JPY',
+        'BR': '31.99 BRL',
+        'CA': '12.99 CAD',
+        'MX': '179 MXN',
+        'AU': '12.99 AUD'
+    }
+};
+
+// Replace the US price inside one piece of text. Matches the US number
+// (e.g. 2.99) together with any 'US', 'US$', '$' before it and 'USD'
+// after it, so 'US 2.99', 'AmazonUS 2.99', '$2.99' and '9.99 USD' are all
+// handled. A number that is only part of a bigger one (the '9.99' inside
+// '19.99') is left alone.
+function replaceUsPrice(text, usNumber, localPrice) {
+    var escaped = usNumber.replace(/\./g, '\\.');
+    var re = new RegExp('(US\\s*\\$?\\s*|\\$\\s*)?' + escaped + '(\\s*USD)?', 'g');
+    return text.replace(re, function(match, prefix, suffix, offset, whole) {
+        var before = offset > 0 ? whole.charAt(offset - 1) : '';
+        var after = whole.charAt(offset + match.length);
+        // Part of a bigger number: leave it.
+        if (!prefix && /[0-9.]/.test(before)) return match;
+        if (/[0-9]/.test(after)) return match;
+        // Keep a space between a word and the new price ('Amazon 4.99 AUD').
+        var lead = /[A-Za-z0-9]/.test(before) ? ' ' : '';
+        return lead + localPrice;
+    });
+}
+
+function localizePriceText(el, asin, marketplaceCode) {
+    if (!asin || marketplaceCode === 'US') return;
+    if (el.getAttribute('data-vc-price-done')) return;
+    var prices = AMAZON_PRICING[asin];
+    if (!prices || !prices.US || !prices[marketplaceCode]) return;
+    var numberMatch = prices.US.match(/[0-9]+(?:\.[0-9]+)?/);
+    if (!numberMatch) return;
+
+    var usNumber = numberMatch[0];
+    var localPrice = prices[marketplaceCode];
+    var changed = false;
+
+    (function walk(node) {
+        var children = node.childNodes || [];
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i];
+            if (child.nodeType === 3) {
+                var updated = replaceUsPrice(child.nodeValue, usNumber, localPrice);
+                if (updated !== child.nodeValue) {
+                    child.nodeValue = updated;
+                    changed = true;
+                }
+            } else if (child.nodeType === 1) {
+                walk(child);
+            }
+        }
+    })(el);
+
+    // Mark it so a second pass can never re-process the new price.
+    el.setAttribute('data-vc-price-done', '1');
+    if (changed) console.log('Local price applied:', asin, '->', marketplaceCode, localPrice);
+}
+
+function localizeAllPrices(marketplaceCode) {
+    document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
+        localizePriceText(el, extractAsinFromElement(el), marketplaceCode);
+    });
+}
+
 function getAttributionTable() {
     if (TRAFFIC_SOURCE === 'google') return AMAZON_ATTRIBUTION_GOOGLE;
     if (TRAFFIC_SOURCE === 'meta') return AMAZON_ATTRIBUTION;
@@ -618,9 +722,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // immediately rather than after a delay. Run once more on 'load' in
     // case anything is injected late (quietly, it's idempotent).
     rewriteAmazonLinks(MARKETPLACE_CODE);
+    // Prices must be localized before the buy buttons are set up below,
+    // so a button's saved label (restored when a visitor comes back from
+    // Amazon) already shows the local price.
+    localizeAllPrices(MARKETPLACE_CODE);
     window.addEventListener('load', function() {
         document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
-            applyAmazonLink(el, extractAsinFromElement(el), MARKETPLACE_CODE, true);
+            var asin = extractAsinFromElement(el);
+            applyAmazonLink(el, asin, MARKETPLACE_CODE, true);
+            localizePriceText(el, asin, MARKETPLACE_CODE);
         });
     });
 
