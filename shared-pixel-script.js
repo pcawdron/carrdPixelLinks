@@ -45,7 +45,7 @@
 //   - Ireland now maps to amazon.co.uk (it previously mapped to 'IE',
 //     which has no Amazon store, so Irish visitors kept amazon.com).
 // =====================================================================
-console.log('Pixel script 1.09');
+console.log('Pixel script 1.10');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
