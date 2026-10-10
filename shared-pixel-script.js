@@ -440,6 +440,21 @@ var AMAZON_PRICING = {
         'CA': '12.99 CAD',
         'MX': '179 MXN',
         'AU': '12.99 AUD'
+    },
+    'B01F02A89K': {
+        'US': 'US 99c',
+        'IN': '96 INR',
+        'UK': '0.99 GBP',
+        'DE': '0.99 EUR',
+        'FR': '0.99 EUR',
+        'ES': '0.99 EUR',
+        'IT': '0.99 EUR',
+        'NL': '0.99 EUR',
+        'JP': '159 JPY',
+        'BR': '5.99 BRL',
+        'CA': '1.49 CAD',
+        'MX': '16.99 MXN',
+        'AU': '1.99 AUD'
     }
 };
 
