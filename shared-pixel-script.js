@@ -18,6 +18,13 @@
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@main/shared-pixel-script.min.js"></script>
 //
+// CHANGES IN 1.11
+//   - Cents prices: 'US 99c' (also '99¢', '99 cents') is now replaced
+//     whole, so Germany shows '0.99 EUR' instead of '0.99 EURc'. Keep the
+//     'c' in the page HTML; US visitors see the page text unchanged.
+//     A whole-number price is only replaced when it carries a price
+//     marker, so ordinary numbers like '99 copies' are never touched.
+//
 // CHANGES IN 1.09
 //   - Local prices: the US price shown in the text of Amazon links/buttons
 //     (e.g. 'US 2.99', 'AmazonUS 2.99', '9.99 USD') is swapped for the
@@ -45,7 +52,7 @@
 //   - Ireland now maps to amazon.co.uk (it previously mapped to 'IE',
 //     which has no Amazon store, so Irish visitors kept amazon.com).
 // =====================================================================
-console.log('Pixel script 1.10');
+console.log('Pixel script 1.11');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -461,14 +468,23 @@ var AMAZON_PRICING = {
 // Replace the US price inside one piece of text. Matches the US number
 // (e.g. 2.99) together with any 'US', 'US$', '$' before it and 'USD'
 // after it, so 'US 2.99', 'AmazonUS 2.99', '$2.99' and '9.99 USD' are all
-// handled. A number that is only part of a bigger one (the '9.99' inside
-// '19.99') is left alone.
+// handled. A cents mark after the number ('99c', '99¢', '99 cents') is
+// treated as part of the price too, so it's replaced along with it.
+// A number that is only part of a bigger one (the '9.99' inside '19.99',
+// the '99' inside '0.99') is left alone.
 function replaceUsPrice(text, usNumber, localPrice) {
     var escaped = usNumber.replace(/\./g, '\\.');
-    var re = new RegExp('(US\\s*\\$?\\s*|\\$\\s*)?' + escaped + '(\\s*USD)?', 'g');
+    var re = new RegExp(
+        '(US\\s*\\$?\\s*|\\$\\s*)?' + escaped +
+        '(\\s*USD|\\s*\\u00A2|\\s*cents?(?![A-Za-z])|c(?![A-Za-z]))?',
+        'g'
+    );
     return text.replace(re, function(match, prefix, suffix, offset, whole) {
         var before = offset > 0 ? whole.charAt(offset - 1) : '';
         var after = whole.charAt(offset + match.length);
+        // A whole-number price like 99 only counts with a price marker
+        // ('US', '$', 'c', '¢', 'cents', 'USD'), so '99 copies' is left alone.
+        if (usNumber.indexOf('.') === -1 && !prefix && !suffix) return match;
         // Part of a bigger number: leave it.
         if (!prefix && /[0-9.]/.test(before)) return match;
         if (/[0-9]/.test(after)) return match;
