@@ -5,54 +5,40 @@
 //
 // REQUIRED per-page variables (declared with `var` in the page <head>):
 //   PIXEL_ID, BOOK_NAME, BOOK_PRICE, BOOK_ASIN, SERIES_URL,
-//   bookTags, reviewTags, seriesTags, buyButtonTags,
-//   BrowserBannerContainer, BrowserBannerDivider
+//   bookTags, reviewTags, seriesTags, buyButtonTags
 //
 // OPTIONAL per-page variables (pages that omit them behave as before):
-//   GOOGLE_ADS_ID                 e.g. 'AW-993658037'
-//   GOOGLE_BEGIN_CHECKOUT_LABEL   label from the Google Ads "Begin checkout"
-//                                 conversion action (the part after the slash
-//                                 in send_to: 'AW-xxxx/LABEL')
-//   GOOGLE_NAV_MODE               'native' (default) or 'callback'
 //   UNKNOWN_SOURCE_ATTRIBUTION    'meta' (default) or 'none'
+//                                 Visitors not identified as coming from
+//                                 Meta get the Meta attribution link
+//                                 ('meta') or a plain store link ('none').
+//
+// No longer used (safe to leave declared on a page, or delete):
+//   BrowserBannerContainer, BrowserBannerDivider,
+//   GOOGLE_ADS_ID, GOOGLE_BEGIN_CHECKOUT_LABEL, GOOGLE_NAV_MODE
 //
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@main/shared-pixel-script.min.js"></script>
 //
-// CHANGES IN 1.11
-//   - Cents prices: 'US 99c' (also '99¢', '99 cents') is now replaced
-//     whole, so Germany shows '0.99 EUR' instead of '0.99 EURc'. Keep the
-//     'c' in the page HTML; US visitors see the page text unchanged.
-//     A whole-number price is only replaced when it carries a price
-//     marker, so ordinary numbers like '99 copies' are never touched.
+// CHANGES IN 1.12
+//   - Google Ads removed: no gtag.js, no begin_checkout conversion, no
+//     Google attribution links, no 'callback' navigation mode.
+//   - "Open in browser" banner removed (BrowserBannerContainer /
+//     BrowserBannerDivider are no longer read). Delete the banner
+//     element from each Carrd page, or set it hidden by default.
+//   - The Meta pixel now loads for every visitor.
+//   - InitiateCheckout now carries content_ids / content_type, matching
+//     ViewContent, so Meta can tie the two events to the same book.
+//   - More Canadian time zones recognised (Regina, Moncton, Whitehorse...).
 //
-// CHANGES IN 1.09
-//   - Local prices: the US price shown in the text of Amazon links/buttons
-//     (e.g. 'US 2.99', 'AmazonUS 2.99', '9.99 USD') is swapped for the
-//     visitor's store price from AMAZON_PRICING. If the book or store
-//     isn't listed, the text is left exactly as it is.
-//
-// CHANGES IN 1.08
-//   - Checkout (Meta InitiateCheckout / Google begin_checkout) fires once
-//     per visit per book, not once per tap.
-//   - New Clarity smart event 'returned_from_amazon' when a visitor comes
-//     back to this page after tapping buy, plus a Clarity tag
-//     'amazon_away' bucketing how long they were gone.
-//   - 'nav_stalled' no longer fires falsely when the Amazon app opened
-//     (the page is hidden then, not stalled).
-//   - Buy button label and appearance are restored when a visitor returns.
-//
-// CHANGES IN 1.07
-//   - Fallback links now actually use ASIN_SLUG_CACHE
-//     ('/Book-Title/dp/ASIN' instead of '/dp/ASIN'). In 1.06 the cache
-//     was built but never read.
-//   - Links are localized as soon as the DOM is ready (the 500ms delay
-//     is gone), and the buy button re-localizes its own href at click
-//     time, so a fast click can never fall through to the hard-coded
-//     amazon.com link.
-//   - Ireland now maps to amazon.co.uk (it previously mapped to 'IE',
-//     which has no Amazon store, so Irish visitors kept amazon.com).
+// EARLIER
+//   1.11  Cents prices ('US 99c') replaced whole.
+//   1.09  Local store prices swapped into Amazon link/button text.
+//   1.08  Checkout fires once per visit per book; Clarity
+//         'returned_from_amazon' event and 'amazon_away' tag.
+//   1.07  Canonical '/Title/dp/ASIN' fallback links; links localized on
+//         DOM ready; buy button re-localizes at click; Ireland -> .co.uk.
 // =====================================================================
-console.log('Pixel script 1.11');
+console.log('Pixel script 1.12');
 
 var TRACKED_ATTR = 'data-vc-tracked';
 
@@ -64,57 +50,30 @@ function optionalConfig(name, fallback) {
     return (typeof v === 'undefined' || v === null || v === '') ? fallback : v;
 }
 
-var googleAdsId = optionalConfig('GOOGLE_ADS_ID', '');
-var googleBeginCheckoutLabel = optionalConfig('GOOGLE_BEGIN_CHECKOUT_LABEL', '');
-var googleNavMode = optionalConfig('GOOGLE_NAV_MODE', 'native');
 var unknownSourceAttribution = optionalConfig('UNKNOWN_SOURCE_ATTRIBUTION', 'meta');
-
-// =====================================================================
-// BROWSER DETECTION HELPER
-// =====================================================================
-function getUA() {
-    return navigator.userAgent || navigator.vendor || window.opera || '';
-}
-
-function isMetaInAppBrowser() {
-    return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram/i.test(getUA());
-}
 
 // =====================================================================
 // TRAFFIC SOURCE DETECTION
 //
-// Returns 'google', 'meta' or 'other'.
-//
-// Order of evidence:
+// Returns 'meta' or 'other'. Evidence, in order:
 //   1. Explicit utm_source (set by you in the ad's URL parameters)
-//   2. Click IDs the ad platforms add themselves
-//        Google: gclid / gbraid / wbraid     Meta: fbclid
+//   2. fbclid, which Meta adds to ad clicks itself
 //   3. Running inside Facebook/Instagram's in-app browser
-//   4. Otherwise 'other'
-//
-// document.referrer is deliberately NOT used: an organic Google Search
-// visitor has a Google referrer too, and would wrongly fire Google Ads
-// conversions.
 // =====================================================================
+function isMetaInAppBrowser() {
+    var ua = navigator.userAgent || navigator.vendor || window.opera || '';
+    return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|Instagram/i.test(ua);
+}
+
 function detectTrafficSource() {
-    var params = null;
     try {
-        params = new URLSearchParams(window.location.search);
-    } catch (err) {
-        params = null;
-    }
-
-    if (params) {
+        var params = new URLSearchParams(window.location.search);
         var utm = (params.get('utm_source') || '').toLowerCase();
-        if (['google', 'googleads', 'google_ads', 'adwords', 'gads'].indexOf(utm) !== -1) return 'google';
         if (['facebook', 'fb', 'instagram', 'ig', 'meta', 'threads'].indexOf(utm) !== -1) return 'meta';
-
-        if (params.has('gclid') || params.has('gbraid') || params.has('wbraid')) return 'google';
         if (params.has('fbclid')) return 'meta';
-    }
+    } catch (err) {}
 
     if (isMetaInAppBrowser()) return 'meta';
-
     return 'other';
 }
 
@@ -138,67 +97,45 @@ try {
 
 // =====================================================================
 // META PIXEL BASE CODE
-// Loaded for everything EXCEPT visits positively identified as Google,
-// so existing Meta/other behaviour is unchanged.
 // =====================================================================
-if (TRAFFIC_SOURCE !== 'google') {
-    !function(f, b, e, v, n, t, s) {
-        if (f.fbq) return;
-        n = f.fbq = function() {
-            n.callMethod ?
-                n.callMethod.apply(n, arguments) : n.queue.push(arguments)
-        };
-        if (!f._fbq) f._fbq = n;
-        n.push = n;
-        n.loaded = !0;
-        n.version = '2.0';
-        n.queue = [];
-        t = b.createElement(e);
-        t.async = !0;
-        t.src = v;
-        s = b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t, s)
-    }(window, document, 'script',
-        'https://connect.facebook.net/en_US/fbevents.js');
-
-    fbq('init', PIXEL_ID, { external_id: externalId });
-    fbq('track', 'PageView');
-
-    fbq('track', 'ViewContent', {
-        content_ids: [BOOK_ASIN],
-        content_type: 'product',
-        content_name: BOOK_NAME
-    });
-}
-
-// =====================================================================
-// GOOGLE TAG (gtag.js)
-// Only loaded for visits identified as Google, and only if the page
-// supplies a GOOGLE_ADS_ID.
-// =====================================================================
-if (TRAFFIC_SOURCE === 'google' && googleAdsId) {
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = function() {
-        window.dataLayer.push(arguments);
+!function(f, b, e, v, n, t, s) {
+    if (f.fbq) return;
+    n = f.fbq = function() {
+        n.callMethod ?
+            n.callMethod.apply(n, arguments) : n.queue.push(arguments)
     };
+    if (!f._fbq) f._fbq = n;
+    n.push = n;
+    n.loaded = !0;
+    n.version = '2.0';
+    n.queue = [];
+    t = b.createElement(e);
+    t.async = !0;
+    t.src = v;
+    s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+}(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
 
-    var gtagLoader = document.createElement('script');
-    gtagLoader.async = true;
-    gtagLoader.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(googleAdsId);
-    document.head.appendChild(gtagLoader);
+fbq('init', PIXEL_ID, { external_id: externalId });
+fbq('track', 'PageView');
 
-    window.gtag('js', new Date());
-    window.gtag('config', googleAdsId);
-}
+fbq('track', 'ViewContent', {
+    content_ids: [BOOK_ASIN],
+    content_type: 'product',
+    content_name: BOOK_NAME
+});
 
 // =====================================================================
-// CHECKOUT-INITIATED EVENTS (one per platform)
+// CHECKOUT-INITIATED EVENT
 // =====================================================================
-function sendMetaInitiateCheckout() {
+function trackInitiateCheckout() {
     console.log('...trying InitiateCheckout pixel');
     try {
         if (typeof fbq === 'function') {
             fbq('track', 'InitiateCheckout', {
+                content_ids: [BOOK_ASIN],
+                content_type: 'product',
                 content_name: BOOK_NAME,
                 content_category: 'Book',
                 value: BOOK_PRICE,
@@ -210,44 +147,6 @@ function sendMetaInitiateCheckout() {
         }
     } catch (err) {
         console.error('Meta Pixel error:', err);
-    }
-}
-
-// Optional callback is invoked by Google's tag once the event has been
-// sent (used only in GOOGLE_NAV_MODE = 'callback').
-function sendGoogleBeginCheckout(callback) {
-    try {
-        if (typeof window.gtag !== 'function' || !googleAdsId) {
-            console.log('...Google tag NOT SENT (tag not initialised)');
-            if (callback) callback();
-            return;
-        }
-        if (!googleBeginCheckoutLabel) {
-            console.warn('...Google conversion NOT SENT: GOOGLE_BEGIN_CHECKOUT_LABEL is not set');
-            if (callback) callback();
-            return;
-        }
-
-        var payload = {
-            send_to: googleAdsId + '/' + googleBeginCheckoutLabel,
-            value: BOOK_PRICE,
-            currency: 'USD'
-        };
-        if (callback) payload.event_callback = callback;
-
-        window.gtag('event', 'conversion', payload);
-        console.log('...Google Ads begin_checkout conversion sent');
-    } catch (err) {
-        console.error('Google tag error:', err);
-        if (callback) callback();
-    }
-}
-
-function trackInitiateCheckout() {
-    if (TRAFFIC_SOURCE === 'google') {
-        sendGoogleBeginCheckout();
-    } else {
-        sendMetaInitiateCheckout();
     }
 }
 
@@ -347,8 +246,9 @@ function normalizeSelectorList(value) {
 }
 
 // =====================================================================
-// AMAZON MARKETPLACE ATTRIBUTION DATA -- META (and default traffic)
+// AMAZON MARKETPLACE ATTRIBUTION DATA (Meta traffic)
 // Structure: AMAZON_ATTRIBUTION[ASIN][MARKETPLACE_CODE] = full URL
+// An ASIN/store with no entry gets the plain local store link.
 // =====================================================================
 var AMAZON_ATTRIBUTION = {
     'B01F02A89K': {
@@ -384,30 +284,6 @@ var AMAZON_ATTRIBUTION = {
     },
     'B0HD3RRKHM': {
         'DE': 'https://www.amazon.de/Gesang-Sirenen-Erster-Kontakt-German-ebook/dp/B0HD3RRKHM?maas=maas_adg_A1F7976349D9199A1458CBA94A9ED31C_afap_abs&ref_=aa_maas&tag=maas'
-    }
-};
-
-// =====================================================================
-// AMAZON MARKETPLACE ATTRIBUTION DATA -- GOOGLE
-// Same structure as above. Until an ASIN + marketplace has an entry
-// here, Google visitors get the plain store link (never the Meta tag),
-// so Google purchases can't be credited to Meta ad groups.
-// =====================================================================
-var AMAZON_ATTRIBUTION_GOOGLE = {
-    'B01F02A89K': {
-        'CA': 'https://www.amazon.ca/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_FEC1CB78D0884A3B05EE82EE9A367037_afap_abs&ref_=aa_maas&tag=maas',
-        'UK': 'https://www.amazon.co.uk/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_C200244271ACA15A6AC0473C5A2BD374_afap_abs&ref_=aa_maas&tag=maas',
-        'US': 'https://www.amazon.com/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_726EBF70325583E7C094884854129B9D_afap_abs&ref_=aa_maas&tag=maas'
-    },
-    'B0CYH2F9Y4': {
-        'CA': 'https://www.amazon.ca/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_A597F7652E4CBCD9C2D088978292CCB3_afap_abs&ref_=aa_maas&tag=maas',
-        'UK': 'https://www.amazon.co.uk/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_A0B0BD87F3B94EB5AECFBEAD37AA131B_afap_abs&ref_=aa_maas&tag=maas',
-        'US': 'https://www.amazon.com/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_4CD48F62AE95750B00BBAB7F78EA5AA2_afap_abs&ref_=aa_maas&tag=maas'
-    },
-    'B0H67Q8TLR': {
-        'CA': 'https://www.amazon.ca/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_CA941762A7E19CA5494B4554F02E8174_afap_abs&ref_=aa_maas&tag=maas',
-        'UK': 'https://www.amazon.co.uk/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_8398B9A85F4186347F761A0C3BA86CC5_afap_abs&ref_=aa_maas&tag=maas',
-        'US': 'https://www.amazon.com/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_682FCA6FF3336AE9CCACEA28A2FFF976_afap_abs&ref_=aa_maas&tag=maas'
     }
 };
 
@@ -527,20 +403,6 @@ function localizePriceText(el, asin, marketplaceCode) {
     if (changed) console.log('Local price applied:', asin, '->', marketplaceCode, localPrice);
 }
 
-function localizeAllPrices(marketplaceCode) {
-    document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
-        localizePriceText(el, extractAsinFromElement(el), marketplaceCode);
-    });
-}
-
-function getAttributionTable() {
-    if (TRAFFIC_SOURCE === 'google') return AMAZON_ATTRIBUTION_GOOGLE;
-    if (TRAFFIC_SOURCE === 'meta') return AMAZON_ATTRIBUTION;
-    // 'other' traffic: 'meta' preserves the original behaviour;
-    // 'none' gives untagged plain store links.
-    return (unknownSourceAttribution === 'meta') ? AMAZON_ATTRIBUTION : {};
-}
-
 // =====================================================================
 // ASIN -> TITLE SLUG CACHE
 // Built from the attribution URLs above, so untagged fallback links
@@ -548,28 +410,21 @@ function getAttributionTable() {
 // =====================================================================
 var ASIN_SLUG_CACHE = {};
 
-function firstAttributionUrl(entry) {
-    if (!entry) return null;
-    for (var code in entry) {
-        if (entry.hasOwnProperty(code)) return entry[code];
+(function cacheSlugs() {
+    for (var asin in AMAZON_ATTRIBUTION) {
+        if (!AMAZON_ATTRIBUTION.hasOwnProperty(asin)) continue;
+        var entry = AMAZON_ATTRIBUTION[asin];
+        for (var code in entry) {
+            if (!entry.hasOwnProperty(code)) continue;
+            var match = entry[code].match(/^https:\/\/[^/]+\/([^/]+)\/dp\//i);
+            if (match) ASIN_SLUG_CACHE[asin] = match[1];
+            break;
+        }
     }
-    return null;
-}
-
-function cacheSlugsFromAttributionTable(table) {
-    for (var asin in table) {
-        if (!table.hasOwnProperty(asin) || ASIN_SLUG_CACHE[asin]) continue;
-        var anyUrl = firstAttributionUrl(table[asin]);
-        if (!anyUrl) continue;
-        var match = anyUrl.match(/^https:\/\/[^/]+\/([^/]+)\/dp\//i);
-        if (match) ASIN_SLUG_CACHE[asin] = match[1];
-    }
-}
-cacheSlugsFromAttributionTable(AMAZON_ATTRIBUTION);
-cacheSlugsFromAttributionTable(AMAZON_ATTRIBUTION_GOOGLE);
+})();
 
 // =====================================================================
-// MARKETPLACE INFERENCE + AMAZON FALLBACK
+// MARKETPLACE INFERENCE
 // =====================================================================
 var AMAZON_MARKETPLACE_DOMAINS = {
     'US': 'www.amazon.com', 'CA': 'www.amazon.ca', 'MX': 'www.amazon.com.mx',
@@ -597,7 +452,11 @@ var TIMEZONE_MARKETPLACE_MAP = [
     { prefix: 'Europe/Warsaw', code: 'PL' },
     { prefix: 'Europe/Stockholm', code: 'SE' },
     { prefix: 'Europe/Istanbul', code: 'TR' },
-    { zones: ['America/Toronto', 'America/Vancouver', 'America/Montreal', 'America/Winnipeg', 'America/Edmonton', 'America/Halifax', 'America/St_Johns'], code: 'CA' },
+    { zones: ['America/Toronto', 'America/Vancouver', 'America/Montreal', 'America/Winnipeg',
+              'America/Edmonton', 'America/Halifax', 'America/St_Johns', 'America/Regina',
+              'America/Moncton', 'America/Whitehorse', 'America/Glace_Bay', 'America/Goose_Bay',
+              'America/Yellowknife', 'America/Iqaluit', 'America/Swift_Current',
+              'America/Dawson_Creek', 'America/Fort_Nelson'], code: 'CA' },
     { zones: ['America/Mexico_City', 'America/Cancun', 'America/Monterrey', 'America/Merida', 'America/Chihuahua', 'America/Mazatlan', 'America/Tijuana'], code: 'MX' },
     { zones: ['America/Sao_Paulo', 'America/Fortaleza', 'America/Recife', 'America/Bahia', 'America/Belem', 'America/Manaus', 'America/Cuiaba', 'America/Porto_Velho', 'America/Rio_Branco'], code: 'BR' },
     { prefix: 'Asia/Kolkata', code: 'IN' },
@@ -608,6 +467,18 @@ var TIMEZONE_MARKETPLACE_MAP = [
     { prefix: 'Africa/Cairo', code: 'EG' },
     { prefix: 'Africa/Johannesburg', code: 'ZA' }
 ];
+
+var LANGUAGE_MARKETPLACE_MAP = {
+    'en-au': 'AU', 'en-gb': 'UK', 'en-ie': 'UK', 'en-ca': 'CA', 'fr-ca': 'CA',
+    'es-mx': 'MX', 'pt-br': 'BR',
+    'de': 'DE', 'de-de': 'DE', 'de-at': 'DE', 'de-ch': 'DE',
+    'fr': 'FR', 'fr-fr': 'FR', 'fr-be': 'FR',
+    'es': 'ES', 'es-es': 'ES', 'it': 'IT', 'it-it': 'IT',
+    'nl': 'NL', 'nl-nl': 'NL', 'nl-be': 'NL', 'pl': 'PL', 'pl-pl': 'PL',
+    'sv': 'SE', 'sv-se': 'SE', 'tr': 'TR', 'tr-tr': 'TR', 'hi': 'IN', 'hi-in': 'IN',
+    'ja': 'JP', 'ja-jp': 'JP', 'zh-sg': 'SG', 'en-sg': 'SG',
+    'ar-ae': 'AE', 'ar-sa': 'SA', 'ar-eg': 'EG', 'en-za': 'ZA'
+};
 
 function inferMarketplaceCode() {
     var timeZone = '';
@@ -624,29 +495,7 @@ function inferMarketplaceCode() {
     }
 
     var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
-    if (lang === 'en-au') return 'AU';
-    if (lang === 'en-gb') return 'UK';
-    if (lang === 'en-ie') return 'UK';
-    if (lang === 'en-ca' || lang === 'fr-ca') return 'CA';
-    if (lang === 'es-mx') return 'MX';
-    if (lang === 'pt-br') return 'BR';
-    if (lang === 'de' || lang === 'de-de' || lang === 'de-at' || lang === 'de-ch') return 'DE';
-    if (lang === 'fr' || lang === 'fr-fr' || lang === 'fr-be') return 'FR';
-    if (lang === 'es' || lang === 'es-es') return 'ES';
-    if (lang === 'it' || lang === 'it-it') return 'IT';
-    if (lang === 'nl' || lang === 'nl-nl' || lang === 'nl-be') return 'NL';
-    if (lang === 'pl' || lang === 'pl-pl') return 'PL';
-    if (lang === 'sv' || lang === 'sv-se') return 'SE';
-    if (lang === 'tr' || lang === 'tr-tr') return 'TR';
-    if (lang === 'hi' || lang === 'hi-in') return 'IN';
-    if (lang === 'ja' || lang === 'ja-jp') return 'JP';
-    if (lang === 'zh-sg' || lang === 'en-sg') return 'SG';
-    if (lang === 'ar-ae') return 'AE';
-    if (lang === 'ar-sa') return 'SA';
-    if (lang === 'ar-eg') return 'EG';
-    if (lang === 'en-za') return 'ZA';
-
-    return 'US';
+    return LANGUAGE_MARKETPLACE_MAP[lang] || 'US';
 }
 
 // Worked out once, up front, so every link and every click uses the same answer.
@@ -675,13 +524,17 @@ function buildPlainAmazonUrl(asin, marketplaceCode) {
     return 'https://' + amazonDomain + '/' + (slug ? slug + '/' : '') + 'dp/' + asin + '/';
 }
 
+function useAttribution() {
+    return TRAFFIC_SOURCE === 'meta' || unknownSourceAttribution === 'meta';
+}
+
 function resolveAmazonUrl(asin, marketplaceCode) {
     asin = asin.toUpperCase();
 
-    // 1. Attribution URL for this traffic source, if one exists.
-    var attributionEntry = getAttributionTable()[asin];
-    if (attributionEntry && attributionEntry[marketplaceCode]) {
-        return { url: attributionEntry[marketplaceCode], kind: 'attribution' };
+    // 1. Meta attribution URL, if one exists for this book and store.
+    var entry = useAttribution() ? AMAZON_ATTRIBUTION[asin] : null;
+    if (entry && entry[marketplaceCode]) {
+        return { url: entry[marketplaceCode], kind: 'attribution' };
     }
 
     // 2. Otherwise the plain local store link (no attribution tag).
@@ -711,63 +564,42 @@ function applyAmazonLink(el, asin, marketplaceCode, quiet) {
     }
 }
 
-function rewriteAmazonLinks(marketplaceCode) {
+// Localize every Amazon link (href and price text) on the page.
+// Safe to run more than once.
+function localizeAmazonLinks(quiet) {
     document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
         var asin = extractAsinFromElement(el);
         if (!asin) {
-            console.log('Amazon link found but no ASIN:', el.getAttribute('href') || '');
+            if (!quiet) console.log('Amazon link found but no ASIN:', el.getAttribute('href') || '');
             return;
         }
-        applyAmazonLink(el, asin, marketplaceCode);
+        applyAmazonLink(el, asin, MARKETPLACE_CODE, quiet);
+        localizePriceText(el, asin, MARKETPLACE_CODE);
     });
 }
-
-// =====================================================================
-// "OPEN IN BROWSER" BANNER -- shown to any Meta in-app-browser visitor.
-// =====================================================================
-function updateMetaBrowserBanner() {
-    var container = document.querySelector(BrowserBannerContainer);
-    if (!container) return;
-    var divider = document.querySelector(BrowserBannerDivider);
-    var showBanner = isMetaInAppBrowser();
-    container.style.setProperty('display', showBanner ? 'block' : 'none', 'important');
-    if (divider) {
-        divider.style.setProperty('display', showBanner ? 'block' : 'none', 'important');
-    }
-}
-window.addEventListener('load', updateMetaBrowserBanner);
 
 // =====================================================================
 // PAGE INTERACTION TRACKING
 // =====================================================================
 document.addEventListener('DOMContentLoaded', function() {
 
-    // Tag Clarity recordings with the traffic source so sessions can be
-    // filtered Google vs Meta. (Clarity's stub is defined by now.)
+    // Tag Clarity recordings so sessions can be filtered by source/store.
     if (typeof clarity === 'function') {
         clarity('set', 'traffic_source', TRAFFIC_SOURCE);
         clarity('set', 'marketplace', MARKETPLACE_CODE);
     }
 
     // Carrd's links are in the static HTML, so they exist now: localize
-    // immediately rather than after a delay. Run once more on 'load' in
-    // case anything is injected late (quietly, it's idempotent).
-    rewriteAmazonLinks(MARKETPLACE_CODE);
-    // Prices must be localized before the buy buttons are set up below,
-    // so a button's saved label (restored when a visitor comes back from
-    // Amazon) already shows the local price.
-    localizeAllPrices(MARKETPLACE_CODE);
+    // immediately. Prices must be localized before the buy buttons are
+    // set up below, so a button's saved label (restored when a visitor
+    // comes back from Amazon) already shows the local price. Run once
+    // more on 'load' in case anything is injected late.
+    localizeAmazonLinks(false);
     window.addEventListener('load', function() {
-        document.querySelectorAll('a[href*="amazon" i]').forEach(function(el) {
-            var asin = extractAsinFromElement(el);
-            applyAmazonLink(el, asin, MARKETPLACE_CODE, true);
-            localizePriceText(el, asin, MARKETPLACE_CODE);
-        });
+        localizeAmazonLinks(true);
     });
 
     function trackViewContent(contentName, contentCategory) {
-        // Meta-only engagement event; Google visits don't load the Meta pixel.
-        if (TRAFFIC_SOURCE === 'google') return;
         try {
             if (typeof fbq === 'function') {
                 fbq('track', 'ViewContent', {
@@ -812,15 +644,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // -------------------------------------------
     // Buy button(s)
     //
-    // Default: no e.preventDefault() and no manual navigation. The click
-    // stays a genuine native anchor navigation so iOS/Android can treat
-    // it as a trusted user gesture eligible for Universal Links / App
-    // Links. The href is re-localized here first, so it is correct even
-    // if the visitor clicks before anything else has run.
-    //
-    // Exception: Google traffic with GOOGLE_NAV_MODE = 'callback', which
-    // holds navigation until Google's tag confirms the conversion was
-    // sent, with a 1s fallback.
+    // No e.preventDefault() and no manual navigation: the click stays a
+    // genuine native anchor navigation so iOS/Android treat it as a
+    // trusted user gesture eligible for Universal Links / App Links
+    // (deep linking into the Amazon / Kindle app). The href is
+    // re-localized here first, so it is correct even if the visitor
+    // clicks before anything else has run.
     // -------------------------------------------
     function attachBuyButton(selector) {
         var button = document.querySelector(selector);
@@ -832,7 +661,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var labelEl = button.querySelector('.label');
         button.dataset.vcOriginalLabel = labelEl ? labelEl.textContent : '';
 
-        button.addEventListener('click', function(e) {
+        button.addEventListener('click', function() {
             applyAmazonLink(button, extractAsinFromElement(button) || BOOK_ASIN, MARKETPLACE_CODE, true);
             var destination = button.href;
             var firstCheckout = !checkoutAlreadySent();
@@ -843,39 +672,13 @@ document.addEventListener('DOMContentLoaded', function() {
             var pageLeft = false;
             window.addEventListener('pagehide', function() { pageLeft = true; }, { once: true });
 
-            var holdForGoogle = (
-                firstCheckout &&
-                TRAFFIC_SOURCE === 'google' &&
-                googleNavMode === 'callback' &&
-                googleAdsId &&
-                googleBeginCheckoutLabel
-            );
-
-            if (holdForGoogle) {
-                e.preventDefault();
-            }
-
             button.style.pointerEvents = 'none';
-
             var label = button.querySelector('.label');
-            if (label) {
-                label.textContent = 'Opening Amazon Book Page...';
-            }
-
+            if (label) label.textContent = 'Opening Amazon Book Page...';
             button.style.transition = 'opacity 0.25s ease';
             button.style.opacity = '0.6';
 
-            if (holdForGoogle) {
-                markCheckoutSent();
-                var navigated = false;
-                var go = function() {
-                    if (navigated) return;
-                    navigated = true;
-                    window.location.assign(destination);
-                };
-                sendGoogleBeginCheckout(go);
-                setTimeout(go, 1000);
-            } else if (firstCheckout) {
+            if (firstCheckout) {
                 markCheckoutSent();
                 trackInitiateCheckout();
             }
