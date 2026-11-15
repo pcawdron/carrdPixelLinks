@@ -1,5 +1,5 @@
 // =====================================================================
-// SHARED PIXEL SCRIPT 2.0 -- Carrd book landing pages
+// SHARED PIXEL SCRIPT 2.1 -- Carrd book landing pages
 //
 // Load AFTER the page's own settings:
 // <script src="https://cdn.jsdelivr.net/gh/pcawdron/carrdPixelLinks@main/shared-pixel-script.min.js"></script>
@@ -33,7 +33,7 @@
 // =====================================================================
 (function() {
     'use strict';
-    console.log('Pixel script 2.0');
+    console.log('Pixel script 2.1');
 
     // -----------------------------------------------------------------
     // SETTINGS -- read safely, so a missing one can never stop the script
@@ -367,14 +367,18 @@
         setItem('sessionStorage', LEFT_AT_KEY, String(Date.now()));
         showOpening(a);
 
-        // If the page is still showing 2.5s later, navigation didn't
-        // happen: give the button back and note it in Clarity.
+        // If the page is still showing 10s later, navigation probably
+        // didn't happen: give the button back and note it in Clarity.
+        // (Facebook's in-app browser keeps this page on screen until
+        // Amazon's page starts arriving, which on mobile data can take
+        // several seconds -- a shorter wait mistakes a slow load for a
+        // stall and invites a second tap that restarts the load.)
         setTimeout(function() {
             if (document.visibilityState === 'visible' && busyLinks.length) {
                 clarityEvent('nav_stalled');
                 restoreButtons();
             }
-        }, 2500);
+        }, 10000);
     }
 
     // -----------------------------------------------------------------
