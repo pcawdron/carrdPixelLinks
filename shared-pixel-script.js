@@ -33,7 +33,7 @@
 // =====================================================================
 (function() {
     'use strict';
-    console.log('Pixel script 2.1');
+    console.log('Pixel script 2.2');
 
     // -----------------------------------------------------------------
     // SETTINGS -- read safely, so a missing one can never stop the script
@@ -57,41 +57,26 @@
     // -----------------------------------------------------------------
     // AMAZON ATTRIBUTION LINKS: ATTRIBUTION[ASIN][STORE] = full URL
     // A book/store with no entry gets the plain local store link.
+    //
+    // B005OJF0ZC = Anomaly
+    // B0H67Q8TLR = First Contact Essentials
+    // B01F02A89K = Welcome to the Occupied States
     // -----------------------------------------------------------------
     var ATTRIBUTION = {
-        'B01F02A89K': {
-            'CA': 'https://www.amazon.ca/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_3648D3D8A4FDADDB6BE14505B1A50076_afap_abs&ref_=aa_maas&tag=maas',
-            'UK': 'https://www.amazon.co.uk/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_ABCB20D2239FB50EB2B89BABC116F08C_afap_abs&ref_=aa_maas&tag=maas',
-            'US': 'https://www.amazon.com/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_275AB24A74C98F7D7068633CD68CF999_afap_abs&ref_=aa_maas&tag=maas'
-        },
-        'B09F5RGX27': {
-            'CA': 'https://www.amazon.ca/Cold-First-Contact-Peter-Cawdron-ebook/dp/B09F5RGX27?maas=maas_adg_DC06C0978EDBE8B8DDEE6BB258963F75_afap_abs&ref_=aa_maas&tag=maas',
-            'UK': 'https://www.amazon.co.uk/Cold-First-Contact-Peter-Cawdron-ebook/dp/B09F5RGX27?maas=maas_adg_092EDCC339AC7ABA5434055C1ED10DA2_afap_abs&ref_=aa_maas&tag=maas',
-            'US': 'https://www.amazon.com/Cold-First-Contact-Peter-Cawdron-ebook/dp/B09F5RGX27?maas=maas_adg_A810E977440C277816C00BC4928972A7_afap_abs&ref_=aa_maas&tag=maas'
-        },
-        'B0CYH2F9Y4': {
-            'CA': 'https://www.amazon.ca/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_AD0DD3B91C94C133F49DA980230679C0_afap_abs&ref_=aa_maas&tag=maas',
-            'UK': 'https://www.amazon.co.uk/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_25D95F626B627517E13E5F7C5231EF51_afap_abs&ref_=aa_maas&tag=maas',
-            'US': 'https://www.amazon.com/Darkness-Between-Stars-First-Contact-ebook/dp/B0CYH2F9Y4?maas=maas_adg_3C95F8833CD6EB3204A03C3B55CD199D_afap_abs&ref_=aa_maas&tag=maas'
-        },
-        'B0FPK3RGRX': {
-            'CA': 'https://www.amazon.ca/Oracle-First-Contact-Peter-Cawdron-ebook/dp/B0FPK3RGRX?maas=maas_adg_B2FEB002AF9FC6772D363BF4820AA4AA_afap_abs&ref_=aa_maas&tag=maas',
-            'UK': 'https://www.amazon.co.uk/Oracle-First-Contact-Peter-Cawdron-ebook/dp/B0FPK3RGRX?maas=maas_adg_4503874AA8391D5CAF73406EF577D1D5_afap_abs&ref_=aa_maas&tag=maas',
-            'US': 'https://www.amazon.com/Oracle-First-Contact-Peter-Cawdron-ebook/dp/B0FPK3RGRX?maas=maas_adg_EC9F0CE7E215B6F51AAC5E6BBDDE2C83_afap_abs&ref_=aa_maas&tag=maas'
-        },
-        'B0GX36QSG6': {
-            'DE': 'https://www.amazon.de/Willkommen-besetzten-Staaten-Amerika-Kontakt-ebook/dp/B0GX36QSG6?maas=maas_adg_D99B8F6DEF99A57246F06B823887BDB7_afap_abs&ref_=aa_maas&tag=maas'
-        },
-        'B0H65ZBNYD': {
-            'DE': 'https://www.amazon.de/Das-Simulakrum-Erster-Kontakt-German-ebook/dp/B0H65ZBNYD?maas=maas_adg_241AFAA05DD8CD725A622F4F7D406E2A_afap_abs&ref_=aa_maas&tag=maas'
+        'B005OJF0ZC': {
+            'CA': 'https://www.amazon.ca/Anomaly-Peter-Cawdron-ebook/dp/B005OJF0ZC?maas=maas_adg_6E578720CC269B44A82E85859F6495E1_afap_abs&ref_=aa_maas&tag=maas',
+            'UK': 'https://www.amazon.co.uk/Anomaly-Peter-Cawdron-ebook/dp/B005OJF0ZC?maas=maas_adg_63C832220B6E6C8CE01BC9F816C037DB_afap_abs&ref_=aa_maas&tag=maas',
+            'US': 'https://www.amazon.com/Anomaly-Peter-Cawdron-ebook/dp/B005OJF0ZC?maas=maas_adg_160906050429749715786E27B1BD104C_afap_abs&ref_=aa_maas&tag=maas'
         },
         'B0H67Q8TLR': {
-            'CA': 'https://www.amazon.ca/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_D5477F6469CA1B3C91E18C474AD38760_afap_abs&ref_=aa_maas&tag=maas',
-            'UK': 'https://www.amazon.co.uk/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_17398B6BB7D67B4078D2C4642938878E_afap_abs&ref_=aa_maas&tag=maas',
-            'US': 'https://www.amazon.com/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_F559F69ED85A36F78670AC8AF06191AF_afap_abs&ref_=aa_maas&tag=maas'
+            'CA': 'https://www.amazon.ca/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_5AB901ADD6DB6DE4CA98708F65C749B2_afap_abs&ref_=aa_maas&tag=maas',
+            'UK': 'https://www.amazon.co.uk/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_9641E8F7CEE0D6FB5E928848D6A7037B_afap_abs&ref_=aa_maas&tag=maas',
+            'US': 'https://www.amazon.com/First-Contact-Essentials-Peter-Cawdron-ebook/dp/B0H67Q8TLR?maas=maas_adg_3E73EEF03F4A0BD123F110B337F23339_afap_abs&ref_=aa_maas&tag=maas'
         },
-        'B0HD3RRKHM': {
-            'DE': 'https://www.amazon.de/Gesang-Sirenen-Erster-Kontakt-German-ebook/dp/B0HD3RRKHM?maas=maas_adg_A1F7976349D9199A1458CBA94A9ED31C_afap_abs&ref_=aa_maas&tag=maas'
+        'B01F02A89K': {
+            'CA': 'https://www.amazon.ca/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_31B3076DC198B8EE40A93F32DE12A180_afap_abs&ref_=aa_maas&tag=maas',
+            'UK': 'https://www.amazon.co.uk/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_C70803F94FD0B011F3E8A13A7331FB02_afap_abs&ref_=aa_maas&tag=maas',
+            'US': 'https://www.amazon.com/Welcome-Occupied-States-America-Cawdron-ebook/dp/B01F02A89K?maas=maas_adg_367871B70C394FD0C403F9ADF59F47D8_afap_abs&ref_=aa_maas&tag=maas'
         }
     };
 
